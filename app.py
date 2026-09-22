@@ -24,7 +24,7 @@ def load_schema():
 
 # --- UI HEADER ---
 st.title("📄 Credential Extraction Assistant")
-st.caption("Phase 4 — Pre-Flight Document Validation Engine Active")
+st.caption("Phase 5 — Human-in-the-Loop Verification Workspace")
 
 st.divider()
 
@@ -44,7 +44,7 @@ uploaded_file = st.file_uploader(
 if uploaded_file:
     pdf_bytes = uploaded_file.getvalue()
 
-    # Run Phase 4 Pre-Flight Validation
+    # Pre-Flight Validation
     is_valid, validation_msg = DocumentValidator.validate_pdf(
         pdf_bytes, uploaded_file.name
     )
@@ -76,32 +76,52 @@ if uploaded_file:
                 except Exception as e:
                     st.error(f"❌ Extraction Error: {str(e)}")
 
-# --- DISPLAY EXTRACTION RESULTS ---
+# --- HUMAN-IN-THE-LOOP VERIFICATION FORM ---
 if "last_extraction" in st.session_state:
     st.divider()
-    st.subheader("🔍 Extracted Record Preview")
+    st.subheader("✏️ Human-in-the-Loop Verification Workspace")
+    st.caption("Review, edit, or complete extracted metadata prior to database insertion.")
 
-    extracted_dict = st.session_state["last_extraction"]
+    raw_extracted = st.session_state["last_extraction"]
 
-    preview_df = pd.DataFrame(
-        [
-            {
-                "Target Field": k,
-                "Extracted Value": v if v is not None else "— (Not Found)",
-            }
-            for k, v in extracted_dict.items()
-        ]
+    with st.form("verification_form"):
+        updated_data = {}
+        
+        # Display editable fields in a clean 2-column grid
+        fields = list(raw_extracted.keys())
+        for i in range(0, len(fields), 2):
+            c1, c2 = st.columns(2)
+            
+            # Column 1 Field
+            f1 = fields[i]
+            val1 = raw_extracted.get(f1) or ""
+            updated_data[f1] = c1.text_input(label=f1, value=str(val1))
+            
+            # Column 2 Field (if available)
+            if i + 1 < len(fields):
+                f2 = fields[i + 1]
+                val2 = raw_extracted.get(f2) or ""
+                updated_data[f2] = c2.text_input(label=f2, value=str(val2))
+
+        st.markdown("---")
+        save_btn = st.form_submit_button("💾 Save & Confirm Record", type="primary", use_container_width=True)
+
+        if save_btn:
+            st.session_state["confirmed_record"] = updated_data
+            st.success("✅ Record verified and ready for database staging!")
+
+# --- DISPLAY CONFIRMED RECORD ---
+if "confirmed_record" in st.session_state:
+    st.subheader("📋 Verified Record Output")
+    st.dataframe(
+        pd.DataFrame([st.session_state["confirmed_record"]]),
+        use_container_width=True,
     )
-
-    st.dataframe(preview_df, use_container_width=True)
-
-    with st.expander("📄 View Raw JSON Payload"):
-        st.json(extracted_dict)
 
 # --- SIDEBAR WORKSPACE STATUS ---
 with st.sidebar:
     st.markdown("## 📊 My Database")
     st.info("Supabase authentication and persistent database will be connected in Phase 7 & 8.")
-    st.metric("Confirmed Records", "0")
+    st.metric("Confirmed Records", "1" if "confirmed_record" in st.session_state else "0")
     st.divider()
-    st.write("Version: `0.4.0`")
+    st.write("Version: `0.5.0`")
