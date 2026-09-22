@@ -4,6 +4,7 @@ import streamlit as st
 from utils.excel_manager import SchemaManager, build_default_template
 from utils.gemini_extractor import GeminiExtractor
 from utils.validation import DocumentValidator
+from utils.correction_agent import apply_nlp_correction
 
 st.set_page_config(
     page_title="Credential Extraction Assistant",
@@ -24,7 +25,7 @@ def load_schema():
 
 # --- UI HEADER ---
 st.title("📄 Credential Extraction Assistant")
-st.caption("Phase 5 — Human-in-the-Loop Verification Workspace")
+st.caption("Phase 6 — Human-in-the-Loop & Natural-Language Corrections")
 
 st.divider()
 
@@ -110,8 +111,43 @@ if "last_extraction" in st.session_state:
             st.session_state["confirmed_record"] = updated_data
             st.success("✅ Record verified and ready for database staging!")
 
+    # --- NATURAL-LANGUAGE CORRECTIONS SECTION ---
+    st.divider()
+    st.subheader("💬 Natural-Language Corrections")
+    st.caption("Type an instruction to dynamically adjust extracted metadata (e.g., 'Set Approved by to Managing Director').")
+
+    correction_input = st.text_input(
+        "Enter instruction:", 
+        key="nlp_input", 
+        placeholder="e.g., Update Amount to 500,000"
+    )
+
+    if st.button("✨ Apply Correction", use_container_width=True):
+        if correction_input.strip():
+            with st.spinner("Applying AI natural-language corrections..."):
+                try:
+                    expected_fields = list(st.session_state["last_extraction"].keys())
+                    
+                    # Call Gemini correction engine
+                    updated_fields = apply_nlp_correction(
+                        current_data=st.session_state["last_extraction"],
+                        user_instruction=correction_input,
+                        expected_fields=expected_fields
+                    )
+                    
+                    # Update session state & refresh UI
+                    st.session_state["last_extraction"] = updated_fields
+                    st.success("Fields updated successfully!")
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Failed to apply correction: {str(e)}")
+        else:
+            st.warning("Please enter a valid correction instruction.")
+
 # --- DISPLAY CONFIRMED RECORD ---
 if "confirmed_record" in st.session_state:
+    st.divider()
     st.subheader("📋 Verified Record Output")
     st.dataframe(
         pd.DataFrame([st.session_state["confirmed_record"]]),
@@ -124,4 +160,4 @@ with st.sidebar:
     st.info("Supabase authentication and persistent database will be connected in Phase 7 & 8.")
     st.metric("Confirmed Records", "1" if "confirmed_record" in st.session_state else "0")
     st.divider()
-    st.write("Version: `0.5.0`")
+    st.write("Version: `0.6.0`")
