@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 from utils.excel_manager import SchemaManager, build_default_template
 from utils.gemini_extractor import GeminiExtractor
+from utils.validation import DocumentValidator
 
 st.set_page_config(
     page_title="Credential Extraction Assistant",
@@ -23,7 +24,7 @@ def load_schema():
 
 # --- UI HEADER ---
 st.title("📄 Credential Extraction Assistant")
-st.caption("Phase 3 — Gemini API Multi-Modal Extraction Engine")
+st.caption("Phase 4 — Pre-Flight Document Validation Engine Active")
 
 st.divider()
 
@@ -41,32 +42,39 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file:
-    col1, col2 = st.columns([1, 2])
+    pdf_bytes = uploaded_file.getvalue()
 
-    with col1:
-        st.info(f"**File Name:** {uploaded_file.name}")
-        st.info(f"**File Size:** {uploaded_file.size / 1024:.1f} KB")
+    # Run Phase 4 Pre-Flight Validation
+    is_valid, validation_msg = DocumentValidator.validate_pdf(
+        pdf_bytes, uploaded_file.name
+    )
 
-        extract_btn = st.button("🚀 Extract Metadata with Gemini", type="primary", use_container_width=True)
+    if not is_valid:
+        st.error(f"🚫 Pre-Flight Validation Failed: {validation_msg}")
+    else:
+        col1, col2 = st.columns([1, 2])
 
-    if extract_btn:
-        with st.spinner("Analyzing document with Gemini AI..."):
-            try:
-                # Read raw PDF bytes
-                pdf_bytes = uploaded_file.getvalue()
+        with col1:
+            st.success("✅ Pre-flight checks passed")
+            st.info(f"**File Name:** {uploaded_file.name}")
+            st.info(f"**File Size:** {uploaded_file.size / 1024:.1f} KB")
 
-                # Initialize extractor and execute extraction targeting active schema fields
-                extractor = GeminiExtractor()
-                extracted_data = extractor.extract_from_pdf(
-                    pdf_bytes=pdf_bytes,
-                    target_fields=schema.extraction_fields,
-                )
+            extract_btn = st.button("🚀 Extract Metadata with Gemini", type="primary", use_container_width=True)
 
-                st.session_state["last_extraction"] = extracted_data
-                st.success("✅ Extraction completed successfully!")
+        if extract_btn:
+            with st.spinner("Analyzing document with Gemini AI..."):
+                try:
+                    extractor = GeminiExtractor()
+                    extracted_data = extractor.extract_from_pdf(
+                        pdf_bytes=pdf_bytes,
+                        target_fields=schema.extraction_fields,
+                    )
 
-            except Exception as e:
-                st.error(f"❌ Extraction Error: {str(e)}")
+                    st.session_state["last_extraction"] = extracted_data
+                    st.success("✅ Extraction completed successfully!")
+
+                except Exception as e:
+                    st.error(f"❌ Extraction Error: {str(e)}")
 
 # --- DISPLAY EXTRACTION RESULTS ---
 if "last_extraction" in st.session_state:
@@ -75,7 +83,6 @@ if "last_extraction" in st.session_state:
 
     extracted_dict = st.session_state["last_extraction"]
 
-    # Convert dictionary to formatted DataFrame for review
     preview_df = pd.DataFrame(
         [
             {
@@ -97,4 +104,4 @@ with st.sidebar:
     st.info("Supabase authentication and persistent database will be connected in Phase 7 & 8.")
     st.metric("Confirmed Records", "0")
     st.divider()
-    st.write("Version: `0.3.0`")
+    st.write("Version: `0.4.0`")
