@@ -1,5 +1,7 @@
 import json
+import random
 import re
+import time
 from typing import Any, Dict, List
 from google import genai
 from google.genai import types
@@ -7,15 +9,17 @@ import streamlit as st
 
 
 class GeminiExtractor:
-    """Manages multi-modal PDF extraction using Google's GenAI SDK
+    """Manages multi-modal PDF extraction using Google's GenAI SDK.
 
-    and enforces structured JSON output based on the master Excel schema.
+    Includes retry logic and model fallback handling for capacity limits (503)
+    and model versioning.
     """
 
     def __init__(self):
         # Retrieve credentials and model configuration from Streamlit secrets
         self.api_key = st.secrets.get("GEMINI_API_KEY")
-        self.model_name = st.secrets.get("GEMINI_MODEL", "gemini-1.5-pro")
+        # Default to 2.5/3.x flash if no model specified
+        self.model_name = st.secrets.get("GEMINI_MODEL", "gemini-2.5-flash")
 
         if not self.api_key:
             raise ValueError(
@@ -26,9 +30,7 @@ class GeminiExtractor:
         # Initialize official GenAI client
         self.client = genai.Client(api_key=self.api_key)
 
-    def _build_system_instruction(
-        self, target_fields: List[str]
-    ) -> str:
+    def _build_system_instruction(self, target_fields: List[str]) -> str:
         """Constructs a strict system instruction prompt based on active schema fields."""
         formatted_fields = "\n".join([f"- {field}" for field in target_fields])
 
@@ -51,7 +53,10 @@ STRICT EXTRACTION RULES:
     def extract_from_pdf(
         self, pdf_bytes: bytes, target_fields: List[str]
     ) -> Dict[str, Any]:
-        """Uploads PDF bytes to Gemini API and parses structured JSON output."""
+        """Uploads PDF bytes to Gemini API and parses structured JSON output
+
+        with retry and model fallback logic.
+        """
         system_prompt = self._build_system_instruction(target_fields)
 
         # Prepare multimodal document payload
@@ -60,34 +65,69 @@ STRICT EXTRACTION RULES:
             mime_type="application/pdf",
         )
 
-        try:
-            # Request structured response from Gemini
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=[pdf_part, "Extract all required credential metadata from this document into JSON format."],
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    response_mime_type="application/json",
-                    temperature=0.1,  # Low temperature for deterministic extraction
-                ),
-            )
+        # Ordered model fallback list to prevent 404 / decommissioning issues
+        candidate_models = [
+            self.model_name,
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+        ]
+        # Preserve uniqueness while maintaining order
+        candidate_models = list(dict.fromkeys(candidate_models))
 
-            raw_text = response.text.strip() if response.text else "{}"
-            
-            # Clean potential markdown wrapping if present
-            cleaned_text = re.sub(r"^```json\s*", "", raw_text)
-            cleaned_text = re.sub(r"\s*```$", "", cleaned_text).strip()
+        last_error = None
 
-            extracted_data = json.loads(cleaned_text)
+        for model in candidate_models:
+            # Try up to 3 retries per model for temporary 503 capacity spikes
+            for attempt in range(3):
+                try:
+                    response = self.client.models.generate_content(
+                        model=model,
+                        contents=[
+                            pdf_part,
+                            (
+                                "Extract all required credential metadata from"
+                                " this document into JSON format."
+                            ),
+                        ],
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_prompt,
+                            response_mime_type="application/json",
+                            temperature=0.1,  # Deterministic output
+                        ),
+                    )
 
-            # Ensure all requested fields exist in output dictionary
-            final_data = {}
-            for field in target_fields:
-                final_data[field] = extracted_data.get(field)
+                    raw_text = response.text.strip() if response.text else "{}"
 
-            return final_data
+                    # Clean markdown wrappers if returned
+                    cleaned_text = re.sub(r"^```json\s*", "", raw_text)
+                    cleaned_text = re.sub(r"\s*```$", "", cleaned_text).strip()
 
-        except json.JSONDecodeError as err:
-            raise ValueError(f"Gemini returned invalid JSON structure: {err}")
-        except Exception as err:
-            raise RuntimeError(f"Gemini API extraction failed: {str(err)}")
+                    extracted_data = json.loads(cleaned_text)
+
+                    # Align output with master schema target fields
+                    final_data = {}
+                    for field in target_fields:
+                        final_data[field] = extracted_data.get(field)
+
+                    return final_data
+
+                except Exception as err:
+                    last_error = err
+                    err_msg = str(err)
+
+                    # Handle temporary capacity or rate limit spikes (503 / 429)
+                    if "503" in err_msg or "UNAVAILABLE" in err_msg or "429" in err_msg:
+                        backoff_time = (2 ** attempt) + random.uniform(0.5, 1.5)
+                        time.sleep(backoff_time)
+                        continue
+                    # Handle missing or unsupported model names (404)
+                    elif "404" in err_msg or "NOT_FOUND" in err_msg:
+                        break
+                    else:
+                        raise err
+
+        raise RuntimeError(
+            f"Gemini extraction failed across candidate models: {str(last_error)}"
+        )
