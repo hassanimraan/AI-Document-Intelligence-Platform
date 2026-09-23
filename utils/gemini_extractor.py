@@ -16,9 +16,7 @@ def get_gemini_client():
     )
 
     if not api_key:
-        raise ValueError(
-            "GEMINI_API_KEY is not configured."
-        )
+        raise ValueError("GEMINI_API_KEY is not configured.")
 
     return genai.Client(api_key=api_key)
 
@@ -48,11 +46,7 @@ def test_gemini_connection():
 
 
 def extract_structured_data(document_text):
-    """
-    Extract structured credential data from document text.
-
-    PDF processing/OCR will be added in a later phase.
-    """
+    """Extract structured credential data from document text."""
 
     client = get_gemini_client()
     model = get_gemini_model()
@@ -69,24 +63,22 @@ def extract_structured_data(document_text):
     }
 
     schema = {
-    "type": "object",
-    "properties": properties,
-    "required": EXTRACTION_FIELDS,
-    }
+        "type": "object",
+        "properties": properties,
+        "required": EXTRACTION_FIELDS,
     }
 
     prompt = f"""
 You are a document data extraction assistant.
 
-Analyze the supplied document text and extract information
-for the following fields:
+Extract information for these fields:
 
 {EXTRACTION_FIELDS}
 
 Rules:
 1. Extract only information supported by the document.
 2. Never invent or guess information.
-3. If a field is unavailable, return an empty string.
+3. If unavailable, return an empty string.
 4. Preserve names, numbers, dates and document identifiers accurately.
 5. Return only the requested fields.
 6. Do not create additional fields.
