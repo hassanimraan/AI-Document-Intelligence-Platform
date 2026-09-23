@@ -140,7 +140,7 @@ def normalize_date(value):
     """
     Convert common extracted date formats to YYYY-MM-DD.
 
-    Supported examples:
+    Supports examples such as:
         2026-09-23
         23/09/2026
         23-09-2026
@@ -148,6 +148,8 @@ def normalize_date(value):
         23 September 2026
         23 Sep 2026
         September 23, 2026
+        Tue 7/28/2026 12:55 PM
+        Tuesday 7/28/2026 12:55 PM
     """
 
     if value is None:
@@ -164,11 +166,31 @@ def normalize_date(value):
     if not text:
         return None
 
+    # Remove weekday names when present.
+    text_without_weekday = re.sub(
+        r"^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|"
+        r"Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+",
+        "",
+        text,
+        flags=re.IGNORECASE
+    ).strip()
+
     formats = [
+        # Date + time
+        "%m/%d/%Y %I:%M %p",
+        "%m/%d/%Y %H:%M",
+        "%d/%m/%Y %I:%M %p",
+        "%d/%m/%Y %H:%M",
+
+        # Date only
         "%Y-%m-%d",
         "%d/%m/%Y",
+        "%m/%d/%Y",
         "%d-%m-%Y",
+        "%m-%d-%Y",
         "%d.%m.%Y",
+
+        # Text dates
         "%d %B %Y",
         "%d %b %Y",
         "%B %d, %Y",
@@ -176,19 +198,22 @@ def normalize_date(value):
     ]
 
     for fmt in formats:
+
         try:
+
             parsed = datetime.strptime(
-                text,
+                text_without_weekday,
                 fmt
             )
+
             return parsed.date().isoformat()
+
         except ValueError:
             continue
 
     raise ValueError(
         f"Invalid date value: {value}"
     )
-
 
 def normalize_text(value):
     """
