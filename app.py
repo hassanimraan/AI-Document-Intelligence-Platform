@@ -1,143 +1,85 @@
 import json
 
+import pandas as pd
 import streamlit as st
 from supabase import create_client
 
 from config.schema import EXTRACTION_FIELDS
-
-from utils.validation import (
-    validate_pdf,
-    normalize_record,
-)
-
-from utils.pdf_processor import (
-    extract_text_from_pdf
-)
-
+from utils.validation import validate_pdf, normalize_record
+from utils.pdf_processor import extract_text_from_pdf
 from utils.gemini_extractor import (
     extract_structured_data,
     apply_natural_language_correction,
 )
-
-from utils.database import (
-    DatabaseManager
-)
+from utils.database import DatabaseManager
 
 
-# =========================================================
+# ============================================================
 # PAGE CONFIGURATION
-# =========================================================
+# ============================================================
 
 st.set_page_config(
-    page_title="Credential Extraction Assistant",
+    page_title="Credential Extraction Chatbot",
     page_icon="📄",
-    layout="wide"
+    layout="wide",
 )
 
 
-# =========================================================
-# SUPABASE
-# =========================================================
+# ============================================================
+# SUPABASE CLIENT
+# ============================================================
 
 @st.cache_resource
 def get_supabase_client():
-    """
-    Create the Supabase client using the publishable key.
-
-    The secret/service-role key is intentionally NOT used
-    for normal user authentication.
-    """
-
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_PUBLISHABLE_KEY"]
-
     return create_client(
-        url,
-        key
+        st.secrets["SUPABASE_URL"],
+        st.secrets["SUPABASE_PUBLISHABLE_KEY"],
     )
 
 
 supabase = get_supabase_client()
 
 
-# =========================================================
-# AUTHENTICATION HELPERS
-# =========================================================
+# ============================================================
+# AUTHENTICATION STATE
+# ============================================================
 
 def initialize_auth_state():
-    """Initialize temporary authentication state."""
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
 
-    defaults = {
-        "authenticated": False,
-        "access_token": None,
-        "refresh_token": None,
-        "user_email": None,
-    }
+    if "access_token" not in st.session_state:
+        st.session_state.access_token = None
 
-    for key, value in defaults.items():
+    if "refresh_token" not in st.session_state:
+        st.session_state.refresh_token = None
 
-        if key not in st.session_state:
-            st.session_state[key] = value
+    if "user_email" not in st.session_state:
+        st.session_state.user_email = None
 
 
 def restore_session():
-    """
-    Restore the Supabase session from Streamlit session state.
-
-    Streamlit session_state is temporary UI/session state only.
-    It is NOT used as the permanent database.
-    """
-
-    access_token = st.session_state.get(
-        "access_token"
-    )
-
-    refresh_token = st.session_state.get(
-        "refresh_token"
-    )
-
-    if not access_token or not refresh_token:
-        return False
-
     try:
+        session = supabase.auth.get_session()
 
-        response = supabase.auth.set_session(
-            access_token,
-            refresh_token
-        )
+        if session is not None:
+            if session.access_token and session.refresh_token:
+                st.session_state.access_token = session.access_token
+                st.session_state.refresh_token = session.refresh_token
+                st.session_state.authenticated = True
 
-        session = response.session
+                if session.user:
+                    st.session_state.user_email = session.user.email
 
-        if session is None:
-            return False
-
-        st.session_state["authenticated"] = True
-        st.session_state["access_token"] = session.access_token
-        st.session_state["refresh_token"] = session.refresh_token
-
-        user_response = supabase.auth.get_user()
-
-        if user_response.user:
-
-            st.session_state["user_email"] = (
-                user_response.user.email
-            )
-
-        return True
+                return True
 
     except Exception:
+        pass
 
-        st.session_state["authenticated"] = False
-        st.session_state["access_token"] = None
-        st.session_state["refresh_token"] = None
-        st.session_state["user_email"] = None
-
-        return False
+    return False
 
 
 def login_user(email, password):
-    """Authenticate an existing Supabase user."""
-
     response = supabase.auth.sign_in_with_password(
         {
             "email": email,
@@ -149,21 +91,15 @@ def login_user(email, password):
     user = response.user
 
     if session is None or user is None:
+        raise ValueError("Login failed.")
 
-        raise ValueError(
-            "Login did not create an active session. "
-            "Your email may not have been confirmed yet."
-        )
-
-    st.session_state["authenticated"] = True
-    st.session_state["access_token"] = session.access_token
-    st.session_state["refresh_token"] = session.refresh_token
-    st.session_state["user_email"] = user.email
+    st.session_state.access_token = session.access_token
+    st.session_state.refresh_token = session.refresh_token
+    st.session_state.authenticated = True
+    st.session_state.user_email = user.email
 
 
 def signup_user(email, password):
-    """Create a new Supabase user."""
-
     response = supabase.auth.sign_up(
         {
             "email": email,
@@ -171,144 +107,99 @@ def signup_user(email, password):
         }
     )
 
-    user = response.user
-    session = response.session
+    if response.user is None:
+        raise ValueError("Account creation failed.")
 
-    if user is None:
+    if response.session is not None:
+        st.session_state.access_token = response.session.access_token
+        st.session_state.refresh_token = response.session.refresh_token
+        st.session_state.authenticated = True
+        st.session_state.user_email = response.user.email
 
-        raise ValueError(
-            "Supabase did not return a user."
-        )
-
-    # Confirm Email is enabled in this project.
-    if session is None:
-
-        return (
-            "signup_confirmation_required",
-            user
-        )
-
-    # Handles the case where confirmation is disabled.
-    st.session_state["authenticated"] = True
-    st.session_state["access_token"] = session.access_token
-    st.session_state["refresh_token"] = session.refresh_token
-    st.session_state["user_email"] = user.email
-
-    return (
-        "signup_authenticated",
-        user
-    )
+    return response
 
 
 def logout_user():
-    """Sign out the current user."""
-
     try:
-
         supabase.auth.sign_out()
-
     except Exception:
-
         pass
 
-    # Clear authentication state.
-    st.session_state["authenticated"] = False
-    st.session_state["access_token"] = None
-    st.session_state["refresh_token"] = None
-    st.session_state["user_email"] = None
+    st.session_state.authenticated = False
+    st.session_state.access_token = None
+    st.session_state.refresh_token = None
+    st.session_state.user_email = None
 
-    # Clear application workflow state.
-    for key in [
+    # Clear temporary workflow state.
+    keys_to_clear = [
+        "uploaded_file_name",
+        "extracted_text",
         "extracted_data",
-        "document_text",
-        "processed_filename",
+        "edited_data",
         "corrected_data",
-        "correction_instruction",
+        "final_data",
+        "confirmation",
         "verified_data",
-        "last_saved_record",
-        "final_confirmation",
-        "manual_confirmation",
-    ]:
+    ]
 
-        st.session_state.pop(
-            key,
-            None
-        )
+    for key in keys_to_clear:
+        st.session_state.pop(key, None)
 
 
-# =========================================================
-# INITIALIZE AUTH STATE
-# =========================================================
+# ============================================================
+# INITIALIZE AUTH
+# ============================================================
 
 initialize_auth_state()
 
-
-# Restore an existing temporary session.
-if not st.session_state["authenticated"]:
-
+if not st.session_state.authenticated:
     restore_session()
 
 
-# =========================================================
+# ============================================================
 # LOGIN / SIGNUP SCREEN
-# =========================================================
+# ============================================================
 
-if not st.session_state["authenticated"]:
+if not st.session_state.authenticated:
 
-    st.title(
-        "📄 Credential Extraction Assistant"
-    )
+    st.title("📄 Credential Extraction Chatbot")
 
-    st.info(
-        "Please sign in to access the credential "
-        "extraction workspace."
+    st.write(
+        "Secure document extraction and credential management."
     )
 
     login_tab, signup_tab = st.tabs(
-        [
-            "🔑 Login",
-            "📝 Create Account",
-        ]
+        ["Login", "Create Account"]
     )
 
-
-    # =====================================================
+    # --------------------------------------------------------
     # LOGIN
-    # =====================================================
+    # --------------------------------------------------------
 
     with login_tab:
 
-        st.subheader(
-            "Login"
-        )
+        st.subheader("Login")
 
         login_email = st.text_input(
             "Email",
-            key="login_email"
+            key="login_email",
         )
 
         login_password = st.text_input(
             "Password",
             type="password",
-            key="login_password"
+            key="login_password",
         )
 
         if st.button(
-            "🔐 Login",
+            "Login",
             type="primary",
-            key="login_button"
+            key="login_button",
         ):
 
-            if not login_email.strip():
-
+            if not login_email or not login_password:
                 st.error(
-                    "Please enter your email."
-                )
-
-            elif not login_password:
-
-                st.error(
-                    "Please enter your password."
+                    "Please enter your email and password."
                 )
 
             else:
@@ -317,75 +208,56 @@ if not st.session_state["authenticated"]:
 
                     login_user(
                         login_email.strip(),
-                        login_password
+                        login_password,
                     )
 
-                    st.success(
-                        "✓ Login successful."
-                    )
+                    st.success("Login successful.")
 
                     st.rerun()
 
-                except Exception as e:
+                except Exception as exc:
 
                     st.error(
-                        f"Login failed: {e}"
+                        f"Login failed: {exc}"
                     )
 
-
-    # =====================================================
-    # SIGN UP
-    # =====================================================
+    # --------------------------------------------------------
+    # SIGNUP
+    # --------------------------------------------------------
 
     with signup_tab:
 
-        st.subheader(
-            "Create Account"
-        )
+        st.subheader("Create Account")
 
         signup_email = st.text_input(
             "Email",
-            key="signup_email"
+            key="signup_email",
         )
 
         signup_password = st.text_input(
             "Password",
             type="password",
-            key="signup_password"
+            key="signup_password",
         )
 
         signup_password_confirm = st.text_input(
             "Confirm Password",
             type="password",
-            key="signup_password_confirm"
+            key="signup_password_confirm",
         )
 
         if st.button(
-            "📝 Create Account",
+            "Create Account",
             type="primary",
-            key="signup_button"
+            key="signup_button",
         ):
 
-            if not signup_email.strip():
-
+            if not signup_email or not signup_password:
                 st.error(
-                    "Please enter your email."
-                )
-
-            elif not signup_password:
-
-                st.error(
-                    "Please enter a password."
-                )
-
-            elif len(signup_password) < 6:
-
-                st.error(
-                    "Password must be at least 6 characters."
+                    "Please enter an email and password."
                 )
 
             elif signup_password != signup_password_confirm:
-
                 st.error(
                     "Passwords do not match."
                 )
@@ -394,197 +266,211 @@ if not st.session_state["authenticated"]:
 
                 try:
 
-                    status, user = signup_user(
+                    response = signup_user(
                         signup_email.strip(),
-                        signup_password
+                        signup_password,
                     )
 
-                    if status == "signup_confirmation_required":
+                    if response.session is None:
 
                         st.success(
-                            "✓ Account created successfully."
-                        )
-
-                        st.info(
-                            "Please check your email and click "
-                            "the confirmation link before logging in."
+                            "Account created. "
+                            "Please check your email "
+                            "to confirm your account."
                         )
 
                     else:
 
                         st.success(
-                            "✓ Account created and logged in."
+                            "Account created successfully."
                         )
 
                         st.rerun()
 
-                except Exception as e:
+                except Exception as exc:
 
                     st.error(
-                        f"Account creation failed: {e}"
+                        f"Account creation failed: {exc}"
                     )
-
 
     st.stop()
 
 
-# =========================================================
+# ============================================================
 # AUTHENTICATED APPLICATION
-# =========================================================
+# ============================================================
 
-st.title(
-    "📄 Credential Extraction Assistant"
-)
+st.title("📄 Credential Extraction Chatbot")
 
-st.info(
+st.caption(
     "Phase 8 — Persistent Supabase Database"
 )
 
-
-# =========================================================
-# USER INFORMATION / LOGOUT
-# =========================================================
+# ------------------------------------------------------------
+# USER INFORMATION
+# ------------------------------------------------------------
 
 user_col1, user_col2 = st.columns(
-    [4, 1]
+    [5, 1]
 )
 
 with user_col1:
 
     st.success(
-        f"Signed in as: "
-        f"**{st.session_state.get('user_email', 'Unknown user')}**"
+        f"Logged in as: {st.session_state.user_email}"
     )
-
 
 with user_col2:
 
     if st.button(
-        "🚪 Logout",
-        key="logout_button"
+        "Logout",
+        key="logout_button",
     ):
 
         logout_user()
-
         st.rerun()
 
 
-st.divider()
+# ============================================================
+# PDF PROCESSING WORKFLOW
+# ============================================================
 
-
-# =========================================================
-# PDF UPLOAD
-# =========================================================
+st.header("📥 Process Credential Document")
 
 uploaded_file = st.file_uploader(
     "Upload a PDF document",
-    type=["pdf"]
+    type=["pdf"],
+    key="credential_pdf_uploader",
 )
 
 
-if uploaded_file:
+# ------------------------------------------------------------
+# NEW PDF DETECTION
+# ------------------------------------------------------------
 
-    st.write(
-        f"**File:** {uploaded_file.name}"
+if uploaded_file is not None:
+
+    current_file_name = uploaded_file.name
+
+    previous_file_name = st.session_state.get(
+        "uploaded_file_name"
     )
 
+    if current_file_name != previous_file_name:
+
+        st.session_state.uploaded_file_name = (
+            current_file_name
+        )
+
+        st.session_state.pop(
+            "extracted_text",
+            None
+        )
+
+        st.session_state.pop(
+            "extracted_data",
+            None
+        )
+
+        st.session_state.pop(
+            "edited_data",
+            None
+        )
+
+        st.session_state.pop(
+            "corrected_data",
+            None
+        )
+
+        st.session_state.pop(
+            "final_data",
+            None
+        )
+
+        st.session_state.pop(
+            "confirmation",
+            None
+        )
+
+        st.session_state.pop(
+            "verified_data",
+            None
+        )
+
+
+# ------------------------------------------------------------
+# PROCESS PDF
+# ------------------------------------------------------------
+
+if uploaded_file is not None:
+
     if st.button(
-        "Process PDF",
-        type="primary"
+        "🔍 Process PDF",
+        type="primary",
+        key="process_pdf_button",
     ):
 
         try:
 
-            # -------------------------------------------------
-            # Step 1 — Validate PDF
-            # -------------------------------------------------
-
-            validate_pdf(
-                uploaded_file
-            )
-
-            st.success(
-                "✓ PDF validation successful."
-            )
-
-
-            # -------------------------------------------------
-            # Step 2 — Extract PDF text
-            # -------------------------------------------------
+            validate_pdf(uploaded_file)
 
             with st.spinner(
-                "Reading PDF..."
+                "Extracting text from PDF..."
             ):
 
-                document_text = (
-                    extract_text_from_pdf(
-                        uploaded_file
+                extracted_text = extract_text_from_pdf(
+                    uploaded_file
+                )
+
+            if not extracted_text:
+
+                raise ValueError(
+                    "No text could be extracted from the PDF."
+                )
+
+            st.session_state.extracted_text = (
+                extracted_text
+            )
+
+            with st.spinner(
+                "Extracting structured credential data..."
+            ):
+
+                structured_data = (
+                    extract_structured_data(
+                        extracted_text
                     )
                 )
 
-            st.success(
-                "✓ PDF text/OCR extraction successful."
-            )
-
-
-            # -------------------------------------------------
-            # Step 3 — Gemini extraction
-            # -------------------------------------------------
-
-            with st.spinner(
-                "Gemini is analyzing the document..."
+            if isinstance(
+                structured_data,
+                str
             ):
 
-                result = extract_structured_data(
-                    document_text
+                structured_data = json.loads(
+                    structured_data
                 )
 
-            st.success(
-                "✓ Gemini extraction successful."
+            st.session_state.extracted_data = (
+                structured_data
             )
 
+            st.session_state.edited_data = (
+                structured_data.copy()
+            )
 
-            # -------------------------------------------------
-            # Step 4 — Parse JSON
-            # -------------------------------------------------
-
-            try:
-
-                extracted_data = json.loads(
-                    result
-                )
-
-            except json.JSONDecodeError as exc:
-
-                raise ValueError(
-                    "Gemini returned invalid JSON."
-                ) from exc
-
-
-            # -------------------------------------------------
-            # Step 5 — Store temporary data
-            # -------------------------------------------------
-
-            st.session_state[
-                "extracted_data"
-            ] = extracted_data
-
-            st.session_state[
-                "document_text"
-            ] = document_text
-
-            st.session_state[
-                "processed_filename"
-            ] = uploaded_file.name
-
-            # Clear previous workflow state.
             st.session_state.pop(
                 "corrected_data",
                 None
             )
 
             st.session_state.pop(
-                "correction_instruction",
+                "final_data",
+                None
+            )
+
+            st.session_state.pop(
+                "confirmation",
                 None
             )
 
@@ -593,115 +479,125 @@ if uploaded_file:
                 None
             )
 
-            st.session_state.pop(
-                "last_saved_record",
-                None
+            st.success(
+                "PDF processed successfully."
             )
 
-            st.session_state.pop(
-                "final_confirmation",
-                None
-            )
-
-            st.session_state.pop(
-                "manual_confirmation",
-                None
-            )
-
-
-        except Exception as e:
+        except Exception as exc:
 
             st.error(
-                f"Processing failed: {e}"
+                f"Unable to process PDF: {exc}"
             )
 
 
-# =========================================================
-# HUMAN VERIFICATION
-# =========================================================
+# ============================================================
+# EXTRACTED TEXT
+# ============================================================
 
-if "extracted_data" in st.session_state:
+if st.session_state.get(
+    "extracted_text"
+):
 
-    st.divider()
+    with st.expander(
+        "📄 Extracted Text",
+        expanded=False,
+    ):
 
-    st.header(
-        "🔎 Review & Verify Extracted Data"
-    )
-
-    st.warning(
-        "Please carefully review every field. "
-        "You can manually correct information "
-        "or use the natural-language correction "
-        "assistant below."
-    )
-
-    extracted_data = st.session_state[
-        "extracted_data"
-    ]
+        st.text(
+            st.session_state.extracted_text
+        )
 
 
-    # =====================================================
-    # MANUAL EDITING
-    # =====================================================
+# ============================================================
+# MANUAL REVIEW
+# ============================================================
 
-    st.subheader(
-        "Extracted Information"
+if st.session_state.get(
+    "extracted_data"
+):
+
+    st.header("✏️ Review Extracted Data")
+
+    source_data = st.session_state.get(
+        "edited_data",
+        st.session_state.extracted_data,
     )
 
     edited_data = {}
 
     for field in EXTRACTION_FIELDS:
 
-        current_value = extracted_data.get(
-            field,
-            ""
+        current_value = source_data.get(
+            field
         )
+
+        if current_value is None:
+            current_value = ""
 
         edited_data[field] = st.text_input(
             field,
             value=str(current_value),
-            key=f"manual_{field}"
+            key=f"edit_{field}",
+        )
+
+    if st.button(
+        "💾 Apply Manual Edits",
+        key="apply_manual_edits",
+    ):
+
+        st.session_state.edited_data = (
+            edited_data
+        )
+
+        st.session_state.pop(
+            "corrected_data",
+            None
+        )
+
+        st.session_state.pop(
+            "final_data",
+            None
+        )
+
+        st.session_state.pop(
+            "confirmation",
+            None
+        )
+
+        st.success(
+            "Manual edits applied."
         )
 
 
-    # =====================================================
-    # NATURAL-LANGUAGE CORRECTION
-    # =====================================================
+# ============================================================
+# NATURAL LANGUAGE CORRECTION
+# ============================================================
 
-    st.divider()
+if st.session_state.get(
+    "edited_data"
+):
 
-    st.subheader(
-        "💬 Natural-Language Correction"
-    )
-
-    st.write(
-        "Instead of editing a field manually, "
-        "you can describe the correction in normal language."
-    )
-
-    st.caption(
-        'Example: "Change the amount to PKR 4,500,000."'
+    st.header(
+        "💬 Natural Language Correction"
     )
 
     correction_instruction = st.text_area(
-        "Describe your correction",
+        "Describe the correction you want",
         placeholder=(
-            "Example: Change the client name to ABC Construction "
-            "and the amount to PKR 4,500,000."
+            "Example: Change the system to OLMRTS "
+            "and the contract to O&M Contract."
         ),
-        height=100,
-        key="correction_instruction"
+        key="correction_instruction",
     )
 
-
     if st.button(
-        "✨ Apply Correction",
-        type="secondary"
+        "🤖 Apply AI Correction",
+        key="apply_ai_correction",
     ):
 
         if not correction_instruction.strip():
 
-            st.error(
+            st.warning(
                 "Please enter a correction instruction."
             )
 
@@ -709,319 +605,311 @@ if "extracted_data" in st.session_state:
 
             try:
 
-                # Build the current record from the
-                # manually edited fields.
-                current_record = {
-                    field: edited_data.get(
-                        field,
-                        ""
-                    )
-                    for field in EXTRACTION_FIELDS
-                }
-
                 with st.spinner(
-                    "Gemini is applying your correction..."
+                    "Applying AI correction..."
                 ):
 
                     corrected_data = (
                         apply_natural_language_correction(
-                            current_record,
-                            correction_instruction
+                            st.session_state.edited_data,
+                            correction_instruction,
                         )
                     )
 
-                st.session_state[
-                    "corrected_data"
-                ] = corrected_data
+                if isinstance(
+                    corrected_data,
+                    str
+                ):
 
-                # Reset final confirmation because
-                # the record has changed.
+                    corrected_data = json.loads(
+                        corrected_data
+                    )
+
+                st.session_state.corrected_data = (
+                    corrected_data
+                )
+
                 st.session_state.pop(
-                    "final_confirmation",
+                    "final_data",
+                    None
+                )
+
+                st.session_state.pop(
+                    "confirmation",
                     None
                 )
 
                 st.success(
-                    "✓ Correction applied. "
-                    "Please review the updated values below."
+                    "AI correction applied."
                 )
 
-
-            except Exception as e:
+            except Exception as exc:
 
                 st.error(
-                    f"Correction failed: {e}"
+                    f"Unable to apply correction: {exc}"
                 )
 
 
-    # =====================================================
-    # CORRECTED DATA
-    # =====================================================
+# ============================================================
+# CORRECTED DATA REVIEW
+# ============================================================
 
-    if "corrected_data" in st.session_state:
+if st.session_state.get(
+    "corrected_data"
+):
 
-        st.divider()
+    st.header(
+        "🔎 Review Corrected Data"
+    )
 
-        st.subheader(
-            "🔄 Corrected Record — Review Again"
-        )
+    corrected_data = (
+        st.session_state.corrected_data
+    )
 
-        st.warning(
-            "The correction has NOT been saved. "
-            "Review these values carefully before confirmation."
-        )
+    for field in EXTRACTION_FIELDS:
 
-        corrected_data = st.session_state[
-            "corrected_data"
-        ]
-
-        final_data = {}
-
-        for field in EXTRACTION_FIELDS:
-
-            final_value = corrected_data.get(
-                field,
-                ""
-            )
-
-            final_data[field] = st.text_input(
-                field,
-                value=str(final_value),
-                key=f"corrected_{field}"
-            )
-
-
-        st.divider()
-
-        st.subheader(
-            "Confirm Record"
+        value = corrected_data.get(
+            field
         )
 
         st.write(
-            "After reviewing the final values, "
-            "confirm that the record is correct."
+            f"**{field}:** {value if value is not None else ''}"
         )
 
-        confirmed = st.checkbox(
-            "I have reviewed and verified all fields.",
-            key="final_confirmation"
+    if st.button(
+        "Use Corrected Data",
+        key="use_corrected_data",
+    ):
+
+        st.session_state.final_data = (
+            corrected_data.copy()
         )
 
-
-        # =================================================
-        # SAVE CORRECTED RECORD
-        # =================================================
-
-        if st.button(
-            "✓ Confirm & Save Record",
-            type="primary",
-            key="corrected_save_button"
-        ):
-
-            if not confirmed:
-
-                st.error(
-                    "Please confirm that you have reviewed "
-                    "all fields before saving."
-                )
-
-            else:
-
-                try:
-
-                    # -----------------------------------------
-                    # Normalize final human-approved data
-                    # -----------------------------------------
-
-                    normalized_record = normalize_record(
-                        final_data
-                    )
-
-
-                    # -----------------------------------------
-                    # Create database manager
-                    # -----------------------------------------
-
-                    db = DatabaseManager()
-
-
-                    # -----------------------------------------
-                    # Restore authenticated Supabase session
-                    # -----------------------------------------
-
-                    db.set_user_session(
-                        st.session_state["access_token"],
-                        st.session_state["refresh_token"]
-                    )
-
-
-                    # -----------------------------------------
-                    # Save verified record
-                    # -----------------------------------------
-
-                    saved_record = db.insert_credential(
-                        normalized_record,
-                        document_filename=st.session_state.get(
-                            "processed_filename"
-                        )
-                    )
-
-
-                    # -----------------------------------------
-                    # Temporary UI state
-                    # -----------------------------------------
-
-                    st.session_state[
-                        "verified_data"
-                    ] = normalized_record
-
-                    st.session_state[
-                        "last_saved_record"
-                    ] = saved_record
-
-
-                    st.success(
-                        "✓ Record verified and saved successfully "
-                        "to the Supabase database."
-                    )
-
-                    st.info(
-                        f"Database Record ID: "
-                        f"{saved_record['id']}"
-                    )
-
-
-                except Exception as exc:
-
-                    st.error(
-                        f"Unable to save record: {exc}"
-                    )
-
-
-    else:
-
-        # =================================================
-        # CONFIRMATION WITHOUT AI CORRECTION
-        # =================================================
-
-        st.divider()
-
-        st.subheader(
-            "Confirm Record"
-        )
-
-        st.write(
-            "You can manually edit the fields above "
-            "and confirm the record without using "
-            "natural-language correction."
-        )
-
-        confirmed_manual = st.checkbox(
-            "I have reviewed and verified all fields.",
-            key="manual_confirmation"
+        st.success(
+            "Corrected data selected for final verification."
         )
 
 
-        if st.button(
-            "✓ Confirm & Save Record",
-            type="primary",
-            key="manual_save_button"
-        ):
+# ============================================================
+# FINAL CONFIRMATION
+# ============================================================
 
-            if not confirmed_manual:
+if st.session_state.get(
+    "final_data"
+):
 
-                st.error(
-                    "Please confirm that you have reviewed "
-                    "all fields before saving."
-                )
-
-            else:
-
-                try:
-
-                    # -----------------------------------------
-                    # Normalize final manually reviewed data
-                    # -----------------------------------------
-
-                    normalized_record = normalize_record(
-                        edited_data
-                    )
-
-
-                    # -----------------------------------------
-                    # Create database manager
-                    # -----------------------------------------
-
-                    db = DatabaseManager()
-
-
-                    # -----------------------------------------
-                    # Restore authenticated Supabase session
-                    # -----------------------------------------
-
-                    db.set_user_session(
-                        st.session_state["access_token"],
-                        st.session_state["refresh_token"]
-                    )
-
-
-                    # -----------------------------------------
-                    # Save verified record
-                    # -----------------------------------------
-
-                    saved_record = db.insert_credential(
-                        normalized_record,
-                        document_filename=st.session_state.get(
-                            "processed_filename"
-                        )
-                    )
-
-
-                    # -----------------------------------------
-                    # Temporary UI state
-                    # -----------------------------------------
-
-                    st.session_state[
-                        "verified_data"
-                    ] = normalized_record
-
-                    st.session_state[
-                        "last_saved_record"
-                    ] = saved_record
-
-
-                    st.success(
-                        "✓ Record verified and saved successfully "
-                        "to the Supabase database."
-                    )
-
-                    st.info(
-                        f"Database Record ID: "
-                        f"{saved_record['id']}"
-                    )
-
-
-                except Exception as exc:
-
-                    st.error(
-                        f"Unable to save record: {exc}"
-                    )
-
-
-# =========================================================
-# LAST SAVED RECORD
-# =========================================================
-
-if "last_saved_record" in st.session_state:
-
-    st.divider()
-
-    st.subheader(
-        "💾 Last Saved Record"
+    st.header(
+        "✅ Final Verification"
     )
 
-    st.json(
-        st.session_state[
-            "last_saved_record"
-        ]
+    final_data = st.session_state.final_data
+
+    st.json(final_data)
+
+    confirmation = st.checkbox(
+        "I have reviewed the extracted information "
+        "and confirm that it is correct.",
+        key="final_confirmation",
     )
+
+    if st.button(
+        "💾 Confirm & Save Record",
+        type="primary",
+        key="confirm_save_button",
+    ):
+
+        if not confirmation:
+
+            st.warning(
+                "Please confirm that the record is correct."
+            )
+
+        else:
+
+            try:
+
+                normalized_record = normalize_record(
+                    final_data
+                )
+
+                db = DatabaseManager()
+
+                db.set_user_session(
+                    st.session_state.access_token,
+                    st.session_state.refresh_token,
+                )
+
+                saved_record = db.insert_credential(
+                    normalized_record,
+                    document_filename=st.session_state.get(
+                        "uploaded_file_name"
+                    ),
+                )
+
+                st.session_state.verified_data = (
+                    normalized_record
+                )
+
+                st.success(
+                    "✓ Record verified and saved successfully "
+                    "to the Supabase database."
+                )
+
+                st.write(
+                    "**Database Record ID:**"
+                )
+
+                st.code(
+                    saved_record["id"]
+                )
+
+            except Exception as exc:
+
+                st.error(
+                    f"Unable to save record: {exc}"
+                )
+
+
+# ============================================================
+# MY CREDENTIAL RECORDS
+# ============================================================
+
+st.divider()
+
+st.header("📚 My Credential Records")
+
+st.write(
+    "Records stored in Supabase for the currently "
+    "authenticated user."
+)
+
+if st.button(
+    "🔄 Load My Records",
+    key="load_my_records_button",
+):
+
+    try:
+
+        db = DatabaseManager()
+
+        db.set_user_session(
+            st.session_state.access_token,
+            st.session_state.refresh_token,
+        )
+
+        records = db.get_user_credentials()
+
+        if not records:
+
+            st.info(
+                "No saved credential records found."
+            )
+
+        else:
+
+            display_rows = []
+
+            for record in records:
+
+                display_rows.append(
+                    {
+                        "Sr. No.": 0,
+
+                        "Client (PMA)": record.get(
+                            "client_pma"
+                        ),
+
+                        "System (LMBS, PMBS, MMBS, OLMRTS)": (
+                            record.get("system")
+                        ),
+
+                        "Contract": record.get(
+                            "contract"
+                        ),
+
+                        "Document Type": record.get(
+                            "document_type"
+                        ),
+
+                        "Document Number": record.get(
+                            "document_number"
+                        ),
+
+                        "Date of Issuance": record.get(
+                            "date_of_issuance"
+                        ),
+
+                        "Amount": record.get(
+                            "amount"
+                        ),
+
+                        "Initiated By": record.get(
+                            "initiated_by"
+                        ),
+
+                        "Reviewed By": record.get(
+                            "reviewed_by"
+                        ),
+
+                        "Approved by": record.get(
+                            "approved_by"
+                        ),
+                    }
+                )
+
+            # Generate display-only serial numbers.
+            for index, row in enumerate(
+                display_rows,
+                start=1,
+            ):
+
+                row["Sr. No."] = index
+
+            records_df = pd.DataFrame(
+                display_rows
+            )
+
+            records_df = records_df[
+                [
+                    "Sr. No.",
+                    "Client (PMA)",
+                    "System (LMBS, PMBS, MMBS, OLMRTS)",
+                    "Contract",
+                    "Document Type",
+                    "Document Number",
+                    "Date of Issuance",
+                    "Amount",
+                    "Initiated By",
+                    "Reviewed By",
+                    "Approved by",
+                ]
+            ]
+
+            st.dataframe(
+                records_df,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.success(
+                f"Loaded {len(records_df)} "
+                f"saved record(s)."
+            )
+
+    except Exception as exc:
+
+        st.error(
+            f"Unable to load records: {exc}"
+        )
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.divider()
+
+st.caption(
+    "Production-Grade Credential Extraction & "
+    "Persistent Excel Database Chatbot"
+)
