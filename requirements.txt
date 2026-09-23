@@ -5,5 +5,3 @@ google-genai
 supabase
 pydantic
 python-dotenv
-pypdf
-google-generativeai
