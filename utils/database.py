@@ -40,7 +40,8 @@ class DatabaseManager:
 
     def insert_credential(
         self,
-        record
+        record,
+        document_filename=None
     ):
         """
         Insert a verified credential record.
@@ -59,39 +60,48 @@ class DatabaseManager:
 
         row = {
             "user_id": user.id,
+
             "client_pma": record.get(
                 "Client (PMA)"
             ),
+
             "system": record.get(
                 "System (LMBS, PMBS, MMBS, OLMRTS)"
             ),
+
             "contract": record.get(
                 "Contract"
             ),
+
             "document_type": record.get(
                 "Document Type"
             ),
+
             "document_number": record.get(
                 "Document Number"
             ),
+
             "date_of_issuance": record.get(
                 "Date of Issuance"
-            ) or None,
+            ),
+
             "amount": record.get(
                 "Amount"
-            ) or None,
+            ),
+
             "initiated_by": record.get(
                 "Initiated By"
             ),
+
             "reviewed_by": record.get(
                 "Reviewed By"
             ),
+
             "approved_by": record.get(
                 "Approved by"
             ),
-            "document_filename": record.get(
-                "_document_filename"
-            ),
+
+            "document_filename": document_filename,
         }
 
         response = (
