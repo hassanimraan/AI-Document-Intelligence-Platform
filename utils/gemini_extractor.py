@@ -69,10 +69,10 @@ def extract_structured_data(document_text):
     }
 
     schema = {
-        "type": "object",
-        "properties": properties,
-        "required": EXTRACTION_FIELDS,
-        "additionalProperties": False,
+    "type": "object",
+    "properties": properties,
+    "required": EXTRACTION_FIELDS,
+    }
     }
 
     prompt = f"""
