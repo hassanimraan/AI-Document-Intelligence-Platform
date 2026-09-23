@@ -225,39 +225,64 @@ if not st.session_state.authenticated:
     # SIGNUP
     # --------------------------------------------------------
 
+        # --------------------------------------------------------
+    # SIGNUP
+    # --------------------------------------------------------
+
     with signup_tab:
 
         st.subheader("Create Account")
 
-        signup_email = st.text_input(
-            "Email",
-            key="signup_email",
-        )
-
-        signup_password = st.text_input(
-            "Password",
-            type="password",
-            key="signup_password",
-        )
-
-        signup_password_confirm = st.text_input(
-            "Confirm Password",
-            type="password",
-            key="signup_password_confirm",
-        )
-
-        if st.button(
-            "Create Account",
-            type="primary",
-            key="signup_button",
+        with st.form(
+            "create_account_form",
+            clear_on_submit=False,
         ):
 
-            if not signup_email or not signup_password:
+            signup_email = st.text_input(
+                "Email",
+                key="signup_email_form",
+                autocomplete="email",
+            )
+
+            signup_password = st.text_input(
+                "Password",
+                type="password",
+                key="signup_password_form",
+                autocomplete="new-password",
+            )
+
+            signup_password_confirm = st.text_input(
+                "Confirm Password",
+                type="password",
+                key="signup_password_confirm_form",
+                autocomplete="new-password",
+            )
+
+            create_account_submitted = st.form_submit_button(
+                "Create Account",
+                type="primary",
+            )
+
+        if create_account_submitted:
+
+            email = signup_email.strip()
+            password = signup_password
+            password_confirm = signup_password_confirm
+
+            if not email:
+
                 st.error(
-                    "Please enter an email and password."
+                    "Please enter an email address."
                 )
 
-            elif signup_password != signup_password_confirm:
+            elif not password:
+
+                st.error(
+                    "Please enter a password."
+                )
+
+            elif password != password_confirm:
+
                 st.error(
                     "Passwords do not match."
                 )
@@ -267,16 +292,16 @@ if not st.session_state.authenticated:
                 try:
 
                     response = signup_user(
-                        signup_email.strip(),
-                        signup_password,
+                        email,
+                        password,
                     )
 
                     if response.session is None:
 
                         st.success(
-                            "Account created. "
-                            "Please check your email "
-                            "to confirm your account."
+                            "Account created successfully. "
+                            "Please check your email to "
+                            "confirm your account."
                         )
 
                     else:
@@ -292,9 +317,6 @@ if not st.session_state.authenticated:
                     st.error(
                         f"Account creation failed: {exc}"
                     )
-
-    st.stop()
-
 
 # ============================================================
 # AUTHENTICATED APPLICATION
