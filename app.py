@@ -1,39 +1,81 @@
 import streamlit as st
 
-st.set_page_config(page_title='Credential Extraction Assistant', page_icon='📄', layout='wide')
+from utils.excel_manager import ExcelManager
+from utils.validation import validate_schema
 
-if 'current_stage' not in st.session_state:
-    st.session_state.current_stage = 'welcome'
 
-st.markdown('## 📄 Credential Extraction Assistant')
-st.write('Production-grade document extraction and persistent personal database.')
+st.set_page_config(
+    page_title="Credential Extraction Assistant",
+    page_icon="📄",
+    layout="wide"
+)
 
-st.info('Phase 1 — Project Foundation')
 
-col1, col2, col3, col4 = st.columns(4)
-with col1: st.success('✓ Streamlit')
-with col2: st.info('○ Gemini')
-with col3: st.info('○ Supabase')
-with col4: st.info('○ Excel Schema')
+st.markdown("## 📄 Credential Extraction Assistant")
+st.write("Production-grade document extraction and persistent personal database.")
+
+st.info("Phase 2 — Master Excel Schema + Dynamic Column Engine")
+
+
+# ---------------------------------------------------------
+# PHASE 2 SCHEMA TEST
+# ---------------------------------------------------------
+
+try:
+    validate_schema()
+
+    excel_manager = ExcelManager()
+
+    master_headers = excel_manager.get_headers()
+    extraction_headers = excel_manager.get_extraction_headers()
+
+    st.success("✓ Schema loaded and validated successfully.")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### Master Excel Schema")
+        for number, field in enumerate(master_headers, start=1):
+            st.write(f"{number}. `{field}`")
+
+    with col2:
+        st.markdown("### Gemini Extraction Fields")
+        for number, field in enumerate(extraction_headers, start=1):
+            st.write(f"{number}. `{field}`")
+
+    st.info(
+        f"Master fields: {len(master_headers)}  |  "
+        f"Extraction fields: {len(extraction_headers)}"
+    )
+
+    # Test record
+    test_record = {
+        "Client (PMA)": "Test Client",
+        "System (LMBS, PMBS, MMBS, OLMRTS)": "OLMRTS",
+        "Contract": "TEST-001",
+        "Document Type": "Payment Certificate",
+        "Document Number": "PC-001",
+        "Date of Issuance": "23 September 2026",
+        "Amount": 1000000,
+        "Initiated By": "Test Initiator",
+        "Reviewed By": "Test Reviewer",
+        "Approved by": "Test Approver",
+    }
+
+    excel_manager.validate_record(test_record)
+
+    st.success("✓ Test record passed validation.")
+
+    test_df = excel_manager.create_dataframe([test_record])
+
+    st.markdown("### Generated DataFrame")
+    st.dataframe(test_df, use_container_width=True)
+
+except Exception as e:
+    st.error(f"Schema test failed: {e}")
+
 
 st.divider()
-st.markdown('### 👋 Welcome')
-st.write('The application will eventually authenticate users, recover their private workspace, process scanned PDFs with Gemini, allow human verification, save confirmed records to Supabase, and export the personal database to Excel.')
 
-with st.sidebar:
-    st.markdown('## 📊 My Database')
-    st.info('Supabase authentication and persistent database will be connected in later phases.')
-    st.metric('Confirmed Records', '0')
-    st.divider()
-    st.write('Version: `0.1.0`')
-
-if st.button('Start Development Preview', type='primary', use_container_width=True):
-    st.session_state.current_stage = 'upload'
-    st.rerun()
-
-if st.session_state.current_stage == 'upload':
-    st.markdown('### 📤 Document Upload Preview')
-    uploaded_file = st.file_uploader('Upload a PDF document', type=['pdf'])
-    if uploaded_file:
-        st.success(f'File received: {uploaded_file.name}')
-        st.info('Gemini PDF processing will be added in the next phase.')
+st.markdown("### Current Project Status")
+st.write("Phase 2 testing — Gemini and Supabase are not connected yet.")
