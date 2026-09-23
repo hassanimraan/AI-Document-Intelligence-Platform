@@ -1,4 +1,3 @@
-```python
 import json
 
 import streamlit as st
@@ -441,4 +440,3 @@ if "verified_data" in st.session_state:
             "verified_data"
         ]
     )
-```
