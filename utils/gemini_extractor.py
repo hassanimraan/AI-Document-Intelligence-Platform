@@ -1,4 +1,5 @@
 import os
+import time
 
 import streamlit as st
 from google import genai
@@ -7,8 +8,19 @@ from google.genai import types
 from config.schema import EXTRACTION_FIELDS
 
 
+MODEL_PRIORITY = [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+]
+
+MAX_ATTEMPTS_PER_MODEL = 3
+RETRY_DELAY_SECONDS = 2
+
+
 def get_gemini_client():
-    """Create and return the Gemini API client."""
+    """Create Gemini API client."""
 
     api_key = (
         st.secrets.get("GEMINI_API_KEY")
@@ -21,8 +33,29 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 
+def get_available_models(client):
+    """Return configured models that support generateContent."""
+
+    available = set()
+
+    for model in client.models.list():
+        model_name = model.name.replace("models/", "")
+
+        if (
+            model_name in MODEL_PRIORITY
+            and "generateContent" in (model.supported_actions or [])
+        ):
+            available.add(model_name)
+
+    return [
+        model
+        for model in MODEL_PRIORITY
+        if model in available
+    ]
+
+
 def get_gemini_model():
-    """Return the configured Gemini model."""
+    """Return configured/default model."""
 
     return (
         st.secrets.get("GEMINI_MODEL")
@@ -32,24 +65,56 @@ def get_gemini_model():
 
 
 def test_gemini_connection():
-    """Test the Gemini API connection."""
+    """Test Gemini using available models with fallback."""
 
     client = get_gemini_client()
-    model = get_gemini_model()
 
-    response = client.models.generate_content(
-        model=model,
-        contents="Reply with exactly: GEMINI CONNECTION OK",
+    available_models = get_available_models(client)
+
+    if not available_models:
+        raise RuntimeError(
+            "None of the configured Gemini Flash models are available."
+        )
+
+    errors = []
+
+    for model in available_models:
+
+        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
+
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents="Reply with exactly: GEMINI CONNECTION OK",
+                )
+
+                return response.text.strip()
+
+            except Exception as error:
+                errors.append(
+                    f"{model} attempt {attempt}: {error}"
+                )
+
+                if attempt < MAX_ATTEMPTS_PER_MODEL:
+                    time.sleep(RETRY_DELAY_SECONDS)
+
+    raise RuntimeError(
+        "All available Gemini models failed.\n\n"
+        + "\n".join(errors)
     )
-
-    return response.text.strip()
 
 
 def extract_structured_data(document_text):
-    """Extract structured credential data from document text."""
+    """Extract structured credential data using model fallback."""
 
     client = get_gemini_client()
-    model = get_gemini_model()
+
+    available_models = get_available_models(client)
+
+    if not available_models:
+        raise RuntimeError(
+            "None of the configured Gemini Flash models are available."
+        )
 
     properties = {
         field: {
@@ -87,16 +152,38 @@ DOCUMENT TEXT:
 {document_text}
 """
 
-    response = client.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=schema,
-        ),
+    errors = []
+
+    for model in available_models:
+
+        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
+
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=schema,
+                    ),
+                )
+
+                if not response.text:
+                    raise ValueError(
+                        "Gemini returned an empty response."
+                    )
+
+                return response.text
+
+            except Exception as error:
+                errors.append(
+                    f"{model} attempt {attempt}: {error}"
+                )
+
+                if attempt < MAX_ATTEMPTS_PER_MODEL:
+                    time.sleep(RETRY_DELAY_SECONDS)
+
+    raise RuntimeError(
+        "All available Gemini models failed.\n\n"
+        + "\n".join(errors)
     )
-
-    if not response.text:
-        raise ValueError("Gemini returned an empty response.")
-
-    return response.text
