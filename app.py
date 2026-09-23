@@ -3,13 +3,25 @@ import json
 import streamlit as st
 from supabase import create_client
 
-from utils.validation import validate_pdf
-from utils.pdf_processor import extract_text_from_pdf
+from config.schema import EXTRACTION_FIELDS
+
+from utils.validation import (
+    validate_pdf,
+    normalize_record,
+)
+
+from utils.pdf_processor import (
+    extract_text_from_pdf
+)
+
 from utils.gemini_extractor import (
     extract_structured_data,
     apply_natural_language_correction,
 )
-from config.schema import EXTRACTION_FIELDS
+
+from utils.database import (
+    DatabaseManager
+)
 
 
 # =========================================================
@@ -106,6 +118,7 @@ def restore_session():
         user_response = supabase.auth.get_user()
 
         if user_response.user:
+
             st.session_state["user_email"] = (
                 user_response.user.email
             )
@@ -136,6 +149,7 @@ def login_user(email, password):
     user = response.user
 
     if session is None or user is None:
+
         raise ValueError(
             "Login did not create an active session. "
             "Your email may not have been confirmed yet."
@@ -161,6 +175,7 @@ def signup_user(email, password):
     session = response.session
 
     if user is None:
+
         raise ValueError(
             "Supabase did not return a user."
         )
@@ -189,8 +204,11 @@ def logout_user():
     """Sign out the current user."""
 
     try:
+
         supabase.auth.sign_out()
+
     except Exception:
+
         pass
 
     # Clear authentication state.
@@ -207,9 +225,11 @@ def logout_user():
         "corrected_data",
         "correction_instruction",
         "verified_data",
+        "last_saved_record",
         "final_confirmation",
         "manual_confirmation",
     ]:
+
         st.session_state.pop(
             key,
             None
@@ -272,7 +292,6 @@ if not st.session_state["authenticated"]:
             type="password",
             key="login_password"
         )
-
 
         if st.button(
             "🔐 Login",
@@ -340,7 +359,6 @@ if not st.session_state["authenticated"]:
             type="password",
             key="signup_password_confirm"
         )
-
 
         if st.button(
             "📝 Create Account",
@@ -419,7 +437,7 @@ st.title(
 )
 
 st.info(
-    "Phase 7 — Supabase Authentication"
+    "Phase 8 — Persistent Supabase Database"
 )
 
 
@@ -521,7 +539,6 @@ if uploaded_file:
                     document_text
                 )
 
-
             st.success(
                 "✓ Gemini extraction successful."
             )
@@ -560,7 +577,7 @@ if uploaded_file:
                 "processed_filename"
             ] = uploaded_file.name
 
-            # Clear previous correction state.
+            # Clear previous workflow state.
             st.session_state.pop(
                 "corrected_data",
                 None
@@ -568,6 +585,26 @@ if uploaded_file:
 
             st.session_state.pop(
                 "correction_instruction",
+                None
+            )
+
+            st.session_state.pop(
+                "verified_data",
+                None
+            )
+
+            st.session_state.pop(
+                "last_saved_record",
+                None
+            )
+
+            st.session_state.pop(
+                "final_confirmation",
+                None
+            )
+
+            st.session_state.pop(
+                "manual_confirmation",
                 None
             )
 
@@ -598,7 +635,6 @@ if "extracted_data" in st.session_state:
         "assistant below."
     )
 
-
     extracted_data = st.session_state[
         "extracted_data"
     ]
@@ -613,7 +649,6 @@ if "extracted_data" in st.session_state:
     )
 
     edited_data = {}
-
 
     for field in EXTRACTION_FIELDS:
 
@@ -684,7 +719,6 @@ if "extracted_data" in st.session_state:
                     for field in EXTRACTION_FIELDS
                 }
 
-
                 with st.spinner(
                     "Gemini is applying your correction..."
                 ):
@@ -696,10 +730,16 @@ if "extracted_data" in st.session_state:
                         )
                     )
 
-
                 st.session_state[
                     "corrected_data"
                 ] = corrected_data
+
+                # Reset final confirmation because
+                # the record has changed.
+                st.session_state.pop(
+                    "final_confirmation",
+                    None
+                )
 
                 st.success(
                     "✓ Correction applied. "
@@ -737,7 +777,6 @@ if "extracted_data" in st.session_state:
 
         final_data = {}
 
-
         for field in EXTRACTION_FIELDS:
 
             final_value = corrected_data.get(
@@ -769,9 +808,14 @@ if "extracted_data" in st.session_state:
         )
 
 
+        # =================================================
+        # SAVE CORRECTED RECORD
+        # =================================================
+
         if st.button(
             "✓ Confirm & Save Record",
-            type="primary"
+            type="primary",
+            key="corrected_save_button"
         ):
 
             if not confirmed:
@@ -783,22 +827,75 @@ if "extracted_data" in st.session_state:
 
             else:
 
-                # Database saving will be implemented
-                # in the Supabase database phase.
+                try:
 
-                st.session_state[
-                    "verified_data"
-                ] = final_data
+                    # -----------------------------------------
+                    # Normalize final human-approved data
+                    # -----------------------------------------
 
-                st.success(
-                    "✓ Record verified successfully."
-                )
+                    normalized_record = normalize_record(
+                        final_data
+                    )
 
-                st.info(
-                    "Record is currently held temporarily. "
-                    "Permanent database saving will be enabled "
-                    "in Phase 8."
-                )
+
+                    # -----------------------------------------
+                    # Create database manager
+                    # -----------------------------------------
+
+                    db = DatabaseManager()
+
+
+                    # -----------------------------------------
+                    # Restore authenticated Supabase session
+                    # -----------------------------------------
+
+                    db.set_user_session(
+                        st.session_state["access_token"],
+                        st.session_state["refresh_token"]
+                    )
+
+
+                    # -----------------------------------------
+                    # Save verified record
+                    # -----------------------------------------
+
+                    saved_record = db.insert_credential(
+                        normalized_record,
+                        document_filename=st.session_state.get(
+                            "processed_filename"
+                        )
+                    )
+
+
+                    # -----------------------------------------
+                    # Temporary UI state
+                    # -----------------------------------------
+
+                    st.session_state[
+                        "verified_data"
+                    ] = normalized_record
+
+                    st.session_state[
+                        "last_saved_record"
+                    ] = saved_record
+
+
+                    st.success(
+                        "✓ Record verified and saved successfully "
+                        "to the Supabase database."
+                    )
+
+                    st.info(
+                        f"Database Record ID: "
+                        f"{saved_record['id']}"
+                    )
+
+
+                except Exception as exc:
+
+                    st.error(
+                        f"Unable to save record: {exc}"
+                    )
 
 
     else:
@@ -814,7 +911,7 @@ if "extracted_data" in st.session_state:
         )
 
         st.write(
-            "You can also manually edit the fields above "
+            "You can manually edit the fields above "
             "and confirm the record without using "
             "natural-language correction."
         )
@@ -828,7 +925,7 @@ if "extracted_data" in st.session_state:
         if st.button(
             "✓ Confirm & Save Record",
             type="primary",
-            key="manual_save"
+            key="manual_save_button"
         ):
 
             if not confirmed_manual:
@@ -840,35 +937,91 @@ if "extracted_data" in st.session_state:
 
             else:
 
-                st.session_state[
-                    "verified_data"
-                ] = edited_data
+                try:
 
-                st.success(
-                    "✓ Record verified successfully."
-                )
+                    # -----------------------------------------
+                    # Normalize final manually reviewed data
+                    # -----------------------------------------
 
-                st.info(
-                    "Record is currently held temporarily. "
-                    "Permanent database saving will be enabled "
-                    "in Phase 8."
-                )
+                    normalized_record = normalize_record(
+                        edited_data
+                    )
+
+
+                    # -----------------------------------------
+                    # Create database manager
+                    # -----------------------------------------
+
+                    db = DatabaseManager()
+
+
+                    # -----------------------------------------
+                    # Restore authenticated Supabase session
+                    # -----------------------------------------
+
+                    db.set_user_session(
+                        st.session_state["access_token"],
+                        st.session_state["refresh_token"]
+                    )
+
+
+                    # -----------------------------------------
+                    # Save verified record
+                    # -----------------------------------------
+
+                    saved_record = db.insert_credential(
+                        normalized_record,
+                        document_filename=st.session_state.get(
+                            "processed_filename"
+                        )
+                    )
+
+
+                    # -----------------------------------------
+                    # Temporary UI state
+                    # -----------------------------------------
+
+                    st.session_state[
+                        "verified_data"
+                    ] = normalized_record
+
+                    st.session_state[
+                        "last_saved_record"
+                    ] = saved_record
+
+
+                    st.success(
+                        "✓ Record verified and saved successfully "
+                        "to the Supabase database."
+                    )
+
+                    st.info(
+                        f"Database Record ID: "
+                        f"{saved_record['id']}"
+                    )
+
+
+                except Exception as exc:
+
+                    st.error(
+                        f"Unable to save record: {exc}"
+                    )
 
 
 # =========================================================
-# VERIFIED DATA
+# LAST SAVED RECORD
 # =========================================================
 
-if "verified_data" in st.session_state:
+if "last_saved_record" in st.session_state:
 
     st.divider()
 
     st.subheader(
-        "Verified Record"
+        "💾 Last Saved Record"
     )
 
     st.json(
         st.session_state[
-            "verified_data"
+            "last_saved_record"
         ]
     )
