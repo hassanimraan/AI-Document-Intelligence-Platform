@@ -1,4 +1,3 @@
-```python
 import os
 import time
 import json
@@ -30,9 +29,7 @@ def get_gemini_client():
     )
 
     if not api_key:
-        raise ValueError(
-            "GEMINI_API_KEY is not configured."
-        )
+        raise ValueError("GEMINI_API_KEY is not configured.")
 
     return genai.Client(api_key=api_key)
 
@@ -46,11 +43,7 @@ def get_available_models(client):
         models = client.models.list()
 
         for model in models:
-
-            model_name = model.name.replace(
-                "models/",
-                ""
-            )
+            model_name = model.name.replace("models/", "")
 
             supported_methods = getattr(
                 model,
@@ -62,27 +55,21 @@ def get_available_models(client):
                 model_name in MODEL_PRIORITY
                 and (
                     not supported_methods
-                    or "generateContent"
-                    in supported_methods
+                    or "generateContent" in supported_methods
                 )
             ):
-                available_models.append(
-                    model_name
-                )
+                available_models.append(model_name)
 
     except Exception as exc:
-
         raise RuntimeError(
             f"Unable to check Gemini model availability: {exc}"
         ) from exc
 
-    ordered_models = [
+    return [
         model
         for model in MODEL_PRIORITY
         if model in available_models
     ]
-
-    return ordered_models
 
 
 def get_gemini_model():
@@ -99,13 +86,9 @@ def test_gemini_connection():
     """Test Gemini connectivity with fallback and retries."""
 
     client = get_gemini_client()
-
-    available_models = get_available_models(
-        client
-    )
+    available_models = get_available_models(client)
 
     if not available_models:
-
         raise RuntimeError(
             "None of the configured Gemini models are currently available."
         )
@@ -113,14 +96,8 @@ def test_gemini_connection():
     errors = []
 
     for model_name in available_models:
-
-        for attempt in range(
-            1,
-            MAX_ATTEMPTS_PER_MODEL + 1
-        ):
-
+        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
             try:
-
                 response = client.models.generate_content(
                     model=model_name,
                     contents=(
@@ -133,60 +110,51 @@ def test_gemini_connection():
                     return response.text
 
             except Exception as exc:
-
                 errors.append(
                     f"{model_name} attempt {attempt}: {exc}"
                 )
 
                 if attempt < MAX_ATTEMPTS_PER_MODEL:
-                    time.sleep(
-                        RETRY_DELAY_SECONDS
-                    )
+                    time.sleep(RETRY_DELAY_SECONDS)
 
     raise RuntimeError(
-        "Gemini connection failed after all "
-        "model/retry attempts.\n"
+        "Gemini connection failed after all model/retry attempts.\n"
         + "\n".join(errors)
     )
+
+
+def _build_extraction_schema():
+    """Build the Gemini JSON schema."""
+
+    properties = {}
+
+    for field in EXTRACTION_FIELDS:
+        properties[field] = {
+            "type": "string"
+        }
+
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": EXTRACTION_FIELDS,
+    }
 
 
 def extract_structured_data(document_text):
     """Extract the required fields from document text."""
 
-    if (
-        not document_text
-        or not document_text.strip()
-    ):
-
-        raise ValueError(
-            "No document text was provided."
-        )
+    if not document_text or not document_text.strip():
+        raise ValueError("No document text was provided.")
 
     client = get_gemini_client()
-
-    available_models = get_available_models(
-        client
-    )
+    available_models = get_available_models(client)
 
     if not available_models:
-
         raise RuntimeError(
             "None of the configured Gemini models are currently available."
         )
 
-    properties = {}
-
-    for field in EXTRACTION_FIELDS:
-
-        properties[field] = {
-            "type": "string"
-        }
-
-    schema = {
-        "type": "object",
-        "properties": properties,
-        "required": EXTRACTION_FIELDS,
-    }
+    schema = _build_extraction_schema()
 
     prompt = f"""
 You are a professional document credential extraction system.
@@ -218,14 +186,8 @@ Document:
     errors = []
 
     for model_name in available_models:
-
-        for attempt in range(
-            1,
-            MAX_ATTEMPTS_PER_MODEL + 1
-        ):
-
+        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
             try:
-
                 response = client.models.generate_content(
                     model=model_name,
                     contents=prompt,
@@ -236,7 +198,6 @@ Document:
                 )
 
                 if response.text:
-
                     return response.text
 
                 raise ValueError(
@@ -244,16 +205,12 @@ Document:
                 )
 
             except Exception as exc:
-
                 errors.append(
                     f"{model_name} attempt {attempt}: {exc}"
                 )
 
                 if attempt < MAX_ATTEMPTS_PER_MODEL:
-
-                    time.sleep(
-                        RETRY_DELAY_SECONDS
-                    )
+                    time.sleep(RETRY_DELAY_SECONDS)
 
     raise RuntimeError(
         "Structured Gemini extraction failed after all "
@@ -266,25 +223,17 @@ def extract_text_from_image(
     image_bytes,
     mime_type="image/png"
 ):
-    """
-    Extract readable text from a scanned document page
-    using Gemini Vision.
-    """
+    """Extract text from a scanned document page using Gemini Vision."""
 
     if not image_bytes:
-
         raise ValueError(
             "No image data was provided for OCR."
         )
 
     client = get_gemini_client()
-
-    available_models = get_available_models(
-        client
-    )
+    available_models = get_available_models(client)
 
     if not available_models:
-
         raise RuntimeError(
             "None of the configured Gemini models are currently available."
         )
@@ -308,14 +257,8 @@ Rules:
     errors = []
 
     for model_name in available_models:
-
-        for attempt in range(
-            1,
-            MAX_ATTEMPTS_PER_MODEL + 1
-        ):
-
+        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
             try:
-
                 image_part = types.Part.from_bytes(
                     data=image_bytes,
                     mime_type=mime_type,
@@ -330,7 +273,6 @@ Rules:
                 )
 
                 if response.text:
-
                     return response.text
 
                 raise ValueError(
@@ -338,16 +280,12 @@ Rules:
                 )
 
             except Exception as exc:
-
                 errors.append(
                     f"{model_name} attempt {attempt}: {exc}"
                 )
 
                 if attempt < MAX_ATTEMPTS_PER_MODEL:
-
-                    time.sleep(
-                        RETRY_DELAY_SECONDS
-                    )
+                    time.sleep(RETRY_DELAY_SECONDS)
 
     raise RuntimeError(
         "Gemini OCR failed after all model/retry attempts.\n"
@@ -363,16 +301,11 @@ def apply_natural_language_correction(
     Apply a user's natural-language correction
     to the current extracted record.
 
-    This function does NOT save anything to the database.
-    The returned record must be reviewed by the user
-    before confirmation.
+    The corrected record is returned for human review.
+    Nothing is saved to the database here.
     """
 
-    if not isinstance(
-        current_record,
-        dict
-    ):
-
+    if not isinstance(current_record, dict):
         raise TypeError(
             "Current record must be a dictionary."
         )
@@ -381,33 +314,16 @@ def apply_natural_language_correction(
         not correction_instruction
         or not correction_instruction.strip()
     ):
-
         raise ValueError(
             "Correction instruction cannot be empty."
         )
 
-    # Make sure only approved fields are sent
-    # to Gemini.
     current_data = {
-        field: str(
-            current_record.get(field, "")
-        )
+        field: str(current_record.get(field, ""))
         for field in EXTRACTION_FIELDS
     }
 
-    properties = {}
-
-    for field in EXTRACTION_FIELDS:
-
-        properties[field] = {
-            "type": "string"
-        }
-
-    schema = {
-        "type": "object",
-        "properties": properties,
-        "required": EXTRACTION_FIELDS,
-    }
+    schema = _build_extraction_schema()
 
     prompt = f"""
 You are a professional document-record correction assistant.
@@ -436,24 +352,19 @@ IMPORTANT RULES:
    does not ask you to change.
 6. Apply only corrections that are clearly stated.
 7. Do not guess or invent information.
-8. Do not change "Sr. No." because it is generated
-   by the application.
-9. If the user asks to clear a field, return an
-   empty string for that field.
+8. Do not change "Sr. No.".
+9. If the user asks to clear a field, return
+   an empty string for that field.
 10. Preserve dates, document numbers and amounts
-    exactly as instructed by the user.
+    exactly as instructed.
 
 Return the corrected record only.
 """
 
     client = get_gemini_client()
-
-    available_models = get_available_models(
-        client
-    )
+    available_models = get_available_models(client)
 
     if not available_models:
-
         raise RuntimeError(
             "None of the configured Gemini models are currently available."
         )
@@ -461,14 +372,8 @@ Return the corrected record only.
     errors = []
 
     for model_name in available_models:
-
-        for attempt in range(
-            1,
-            MAX_ATTEMPTS_PER_MODEL + 1
-        ):
-
+        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
             try:
-
                 response = client.models.generate_content(
                     model=model_name,
                     contents=prompt,
@@ -479,7 +384,6 @@ Return the corrected record only.
                 )
 
                 if not response.text:
-
                     raise ValueError(
                         "Gemini returned an empty correction response."
                     )
@@ -488,27 +392,20 @@ Return the corrected record only.
                     response.text
                 )
 
-                # Security/schema validation:
-                # Gemini must not return unexpected fields.
                 unexpected_fields = (
                     set(corrected_record.keys())
                     - set(EXTRACTION_FIELDS)
                 )
 
                 if unexpected_fields:
-
                     raise ValueError(
                         "Gemini returned unexpected fields: "
                         f"{sorted(unexpected_fields)}"
                     )
 
-                # Make sure all required fields exist.
                 corrected_record = {
                     field: str(
-                        corrected_record.get(
-                            field,
-                            ""
-                        )
+                        corrected_record.get(field, "")
                     )
                     for field in EXTRACTION_FIELDS
                 }
@@ -516,20 +413,16 @@ Return the corrected record only.
                 return corrected_record
 
             except Exception as exc:
-
                 errors.append(
                     f"{model_name} attempt {attempt}: {exc}"
                 )
 
                 if attempt < MAX_ATTEMPTS_PER_MODEL:
-
-                    time.sleep(
-                        RETRY_DELAY_SECONDS
-                    )
+                    time.sleep(RETRY_DELAY_SECONDS)
 
     raise RuntimeError(
         "Natural-language correction failed after all "
         "model/retry attempts.\n"
         + "\n".join(errors)
     )
-```
+
