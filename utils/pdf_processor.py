@@ -1,8 +1,6 @@
-from io import BytesIO
+import fitz
 
-import fitz  # PyMuPDF
-
-from utils.gemini_extractor import extract_structured_data
+from utils.gemini_extractor import extract_text_from_image
 
 
 def extract_text_from_pdf(uploaded_file):
@@ -10,8 +8,8 @@ def extract_text_from_pdf(uploaded_file):
     Extract text from a PDF.
 
     Supports:
-    1. Normal text-based PDFs
-    2. Scanned/image-based PDFs using Gemini vision fallback
+    - Normal text-based PDFs
+    - Scanned/image-based PDFs using Gemini Vision OCR
     """
 
     if uploaded_file is None:
@@ -23,7 +21,10 @@ def extract_text_from_pdf(uploaded_file):
         raise ValueError("The PDF file is empty.")
 
     try:
-        pdf = fitz.open(stream=file_bytes, filetype="pdf")
+        pdf = fitz.open(
+            stream=file_bytes,
+            filetype="pdf"
+        )
     except Exception as exc:
         raise ValueError(
             f"Unable to read PDF: {exc}"
@@ -31,12 +32,17 @@ def extract_text_from_pdf(uploaded_file):
 
     if pdf.page_count == 0:
         pdf.close()
-        raise ValueError("The PDF contains no pages.")
+        raise ValueError(
+            "The PDF contains no pages."
+        )
 
     text_parts = []
+    pages_without_text = []
 
     try:
+        # First attempt: normal PDF text extraction
         for page_number in range(pdf.page_count):
+
             page = pdf.load_page(page_number)
 
             text = page.get_text("text").strip()
@@ -45,17 +51,53 @@ def extract_text_from_pdf(uploaded_file):
                 text_parts.append(
                     f"--- PAGE {page_number + 1} ---\n{text}"
                 )
+            else:
+                pages_without_text.append(
+                    page_number
+                )
+
+        # If every page has text, return normally.
+        if not pages_without_text:
+            return "\n\n".join(text_parts).strip()
+
+        # OCR only pages where no text was found.
+        for page_number in pages_without_text:
+
+            page = pdf.load_page(page_number)
+
+            pixmap = page.get_pixmap(
+                matrix=fitz.Matrix(2, 2),
+                alpha=False
+            )
+
+            image_bytes = pixmap.tobytes(
+                "png"
+            )
+
+            ocr_text = extract_text_from_image(
+                image_bytes,
+                mime_type="image/png"
+            )
+
+            if ocr_text and ocr_text.strip():
+
+                text_parts.append(
+                    f"--- PAGE {page_number + 1} "
+                    f"(OCR) ---\n"
+                    f"{ocr_text.strip()}"
+                )
 
     finally:
         pdf.close()
 
-    extracted_text = "\n\n".join(text_parts).strip()
+    extracted_text = "\n\n".join(
+        text_parts
+    ).strip()
 
-    if extracted_text:
-        return extracted_text
+    if not extracted_text:
+        raise ValueError(
+            "No readable text could be extracted "
+            "from this PDF, including OCR processing."
+        )
 
-    raise ValueError(
-        "No extractable text was found in this PDF. "
-        "This appears to be a scanned/image-based document. "
-        "OCR processing will be added in the next step."
-    )
+    return extracted_text
