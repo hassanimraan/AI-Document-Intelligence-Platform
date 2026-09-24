@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 
 from config.schema import EXTRACTION_FIELDS
@@ -7,10 +8,16 @@ from utils.database import DatabaseManager
 from ui.common import reset_after_manual_edit
 
 
-def _render_record_fields(data, key_prefix):
+def _render_record_fields(
+    data,
+    key_prefix,
+):
     """Render editable fields using the locked extraction schema."""
 
-    if not isinstance(data, dict):
+    if not isinstance(
+        data,
+        dict,
+    ):
         raise ValueError(
             "Record data must be a dictionary."
         )
@@ -18,7 +25,10 @@ def _render_record_fields(data, key_prefix):
     edited_data = {}
 
     for field in EXTRACTION_FIELDS:
-        value = data.get(field)
+
+        value = data.get(
+            field
+        )
 
         if value is None:
             value = ""
@@ -33,14 +43,12 @@ def _render_record_fields(data, key_prefix):
 
 
 def _validate_record_fields(record):
-    """
-    Normalize and validate a record before it can be saved.
+    """Normalize and validate a record before saving."""
 
-    normalize_record() also provides the application's
-    standard amount/date/text normalization.
-    """
-
-    if not isinstance(record, dict):
+    if not isinstance(
+        record,
+        dict,
+    ):
         raise ValueError(
             "The record is not in a valid format."
         )
@@ -62,12 +70,14 @@ def _validate_record_fields(record):
     )
 
     if missing_fields:
+
         raise ValueError(
             "The record is missing required fields: "
             f"{sorted(missing_fields)}"
         )
 
     if unexpected_fields:
+
         raise ValueError(
             "The record contains unexpected fields: "
             f"{sorted(unexpected_fields)}"
@@ -82,7 +92,7 @@ def _validate_record_fields(record):
 
 
 def _get_current_file_progress():
-    """Return the current PDF position and total queue size."""
+    """Return current PDF position and total queue size."""
 
     current_index = st.session_state.get(
         "selected_pdf_index",
@@ -100,10 +110,13 @@ def _get_current_file_progress():
     ):
         current_index = 0
 
-    if not isinstance(
-        total_files,
-        int,
-    ) or total_files < 1:
+    if (
+        not isinstance(
+            total_files,
+            int,
+        )
+        or total_files < 1
+    ):
         total_files = 1
 
     current_index = max(
@@ -114,7 +127,39 @@ def _get_current_file_progress():
         ),
     )
 
-    return current_index, total_files
+    return (
+        current_index,
+        total_files,
+    )
+
+
+def _is_current_document_workflow():
+    """
+    Verify that the current review state belongs to the
+    currently selected uploaded PDF.
+
+    Filename alone is intentionally not used because two
+    different PDFs may have the same filename.
+    """
+
+    current_signature = (
+        st.session_state.get(
+            "current_file_signature"
+        )
+    )
+
+    processed_signature = (
+        st.session_state.get(
+            "processed_file_signature"
+        )
+    )
+
+    return (
+        current_signature is not None
+        and processed_signature is not None
+        and current_signature
+        == processed_signature
+    )
 
 
 def render_manual_review():
@@ -125,6 +170,9 @@ def render_manual_review():
     )
 
     if not extracted_data:
+        return
+
+    if not _is_current_document_workflow():
         return
 
     st.divider()
@@ -149,21 +197,15 @@ def render_manual_review():
     ):
 
         try:
+
             normalized_data = (
                 _validate_record_fields(
                     edited_data
                 )
             )
 
-            st.session_state.edited_data = (
-                normalized_data
-            )
-
             reset_after_manual_edit()
 
-            # Restore the manually edited data because
-            # reset_after_manual_edit() clears downstream
-            # correction/final-verification state only.
             st.session_state.edited_data = (
                 normalized_data
             )
@@ -189,13 +231,16 @@ def render_manual_review():
 
 
 def render_final_verification():
-    """Render final human verification and database save."""
+    """Render final verification and permanent database save."""
 
     edited_data = st.session_state.get(
         "edited_data"
     )
 
     if not edited_data:
+        return
+
+    if not _is_current_document_workflow():
         return
 
     st.divider()
@@ -209,15 +254,15 @@ def render_final_verification():
         "before saving it permanently to the database."
     )
 
-    # --------------------------------------------------------
-    # Prevent editing/saving a record that has already been
-    # successfully saved during the current workflow.
-    # --------------------------------------------------------
+    # ========================================================
+    # ALREADY SAVED
+    # ========================================================
 
     if st.session_state.get(
         "final_confirmation",
         False,
     ):
+
         st.success(
             "This record has already been verified and saved "
             "to the database."
@@ -228,7 +273,9 @@ def render_final_verification():
         )
 
         if verified_data:
+
             for field in EXTRACTION_FIELDS:
+
                 value = verified_data.get(
                     field
                 )
@@ -251,6 +298,7 @@ def render_final_verification():
             current_index + 1
             < total_files
         ):
+
             st.info(
                 "This document is complete. "
                 "Continue with the next PDF."
@@ -261,6 +309,7 @@ def render_final_verification():
                 type="primary",
                 key="process_next_pdf_button",
             ):
+
                 st.session_state.advance_to_next_pdf = (
                     True
                 )
@@ -268,6 +317,7 @@ def render_final_verification():
                 st.rerun()
 
         else:
+
             st.success(
                 "🎉 All selected PDFs have been "
                 "processed and verified."
@@ -280,9 +330,9 @@ def render_final_verification():
 
         return
 
-    # --------------------------------------------------------
-    # Final verification fields
-    # --------------------------------------------------------
+    # ========================================================
+    # FINAL VERIFICATION FIELDS
+    # ========================================================
 
     final_data = {}
 
@@ -305,9 +355,9 @@ def render_final_verification():
         final_data
     )
 
-    # --------------------------------------------------------
-    # Human confirmation
-    # --------------------------------------------------------
+    # ========================================================
+    # HUMAN CONFIRMATION
+    # ========================================================
 
     confirmation = st.checkbox(
         "I have reviewed and verified this record "
@@ -315,9 +365,9 @@ def render_final_verification():
         key="final_confirmation_checkbox",
     )
 
-    # --------------------------------------------------------
-    # Save
-    # --------------------------------------------------------
+    # ========================================================
+    # SAVE
+    # ========================================================
 
     if st.button(
         "💾 Confirm & Save Record",
@@ -326,13 +376,16 @@ def render_final_verification():
     ):
 
         if not confirmation:
+
             st.warning(
                 "Please confirm that you have reviewed "
                 "and verified the record before saving."
             )
+
             return
 
         try:
+
             normalized_data = (
                 _validate_record_fields(
                     final_data
@@ -352,15 +405,30 @@ def render_final_verification():
             )
 
             if not access_token:
+
                 raise ValueError(
                     "Your authentication session has expired. "
                     "Please log in again."
                 )
 
             if not refresh_token:
+
                 raise ValueError(
                     "Your authentication session is incomplete. "
                     "Please log in again."
+                )
+
+            # ------------------------------------------------
+            # Verify that the document being saved is still
+            # the document that was actually processed.
+            # ------------------------------------------------
+
+            if not _is_current_document_workflow():
+
+                raise ValueError(
+                    "The selected PDF no longer matches "
+                    "the processed document. Please process "
+                    "the selected PDF again before saving."
                 )
 
             database = DatabaseManager()
@@ -375,6 +443,12 @@ def render_final_verification():
                     "processed_pdf_name"
                 )
             )
+
+            if not processed_pdf_name:
+
+                raise ValueError(
+                    "The processed PDF filename is unavailable."
+                )
 
             saved_record = (
                 database.insert_credential(
@@ -395,15 +469,14 @@ def render_final_verification():
             )
 
             if not saved_record_id:
+
                 raise ValueError(
                     "The database did not return "
                     "a valid record ID."
                 )
 
             # ------------------------------------------------
-            # Mark this workflow as permanently saved.
-            # This prevents accidental duplicate insertion
-            # during subsequent Streamlit reruns.
+            # Mark the workflow as permanently saved.
             # ------------------------------------------------
 
             st.session_state.verified_data = (
@@ -429,7 +502,7 @@ def render_final_verification():
             )
 
             # ------------------------------------------------
-            # Determine whether another PDF is available.
+            # Determine whether another PDF exists.
             # ------------------------------------------------
 
             current_index, total_files = (
@@ -451,6 +524,7 @@ def render_final_verification():
                     type="primary",
                     key="process_next_pdf_after_save_button",
                 ):
+
                     st.session_state.advance_to_next_pdf = (
                         True
                     )
@@ -488,3 +562,4 @@ def render_review_ui():
 
     render_manual_review()
     render_final_verification()
+```
