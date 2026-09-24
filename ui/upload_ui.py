@@ -1,4 +1,3 @@
-```python
 import json
 
 import streamlit as st
@@ -259,4 +258,3 @@ def render_upload_ui():
             st.text(
                 st.session_state.extracted_text
             )
-```
