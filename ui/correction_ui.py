@@ -1,10 +1,11 @@
-```python
 import json
 
 import streamlit as st
 
 from config.schema import EXTRACTION_FIELDS
-from utils.gemini_extractor import apply_natural_language_correction
+from utils.gemini_extractor import (
+    apply_natural_language_correction,
+)
 from utils.validation import normalize_record
 
 from ui.common import reset_after_ai_correction
@@ -21,27 +22,44 @@ def _validate_correction_result(corrected_data):
     - be a dictionary
     - contain exactly the extraction fields
     - not contain generated fields
-    - pass the application's normal record normalization
+    - pass normal record normalization
     """
 
-    if not isinstance(corrected_data, dict):
+    if not isinstance(
+        corrected_data,
+        dict,
+    ):
         raise ValueError(
             "Gemini returned an invalid correction format."
         )
 
-    expected_fields = set(EXTRACTION_FIELDS)
-    actual_fields = set(corrected_data.keys())
+    expected_fields = set(
+        EXTRACTION_FIELDS
+    )
 
-    missing_fields = expected_fields - actual_fields
-    unexpected_fields = actual_fields - expected_fields
+    actual_fields = set(
+        corrected_data.keys()
+    )
+
+    missing_fields = (
+        expected_fields
+        - actual_fields
+    )
+
+    unexpected_fields = (
+        actual_fields
+        - expected_fields
+    )
 
     if missing_fields:
+
         raise ValueError(
             "Gemini correction is missing required fields: "
             f"{sorted(missing_fields)}"
         )
 
     if unexpected_fields:
+
         raise ValueError(
             "Gemini correction contains unexpected fields: "
             f"{sorted(unexpected_fields)}"
@@ -52,20 +70,27 @@ def _validate_correction_result(corrected_data):
         for field in EXTRACTION_FIELDS
     }
 
-    return normalize_record(cleaned_data)
+    return normalize_record(
+        cleaned_data
+    )
 
 
 def _parse_correction_result(corrected_data):
-    """Parse Gemini correction output when it is returned as JSON text."""
+    """Parse Gemini correction output when returned as JSON text."""
 
-    if isinstance(corrected_data, str):
+    if isinstance(
+        corrected_data,
+        str,
+    ):
 
         try:
+
             corrected_data = json.loads(
                 corrected_data
             )
 
         except json.JSONDecodeError as exc:
+
             raise ValueError(
                 "Gemini returned correction data that "
                 "could not be interpreted as valid JSON."
@@ -76,16 +101,48 @@ def _parse_correction_result(corrected_data):
     )
 
 
+def _is_current_document_workflow():
+    """
+    Verify that the correction workflow belongs to the
+    currently selected and processed PDF.
+
+    Filename alone is intentionally not used because
+    multiple PDFs may have the same filename.
+    """
+
+    current_signature = (
+        st.session_state.get(
+            "current_file_signature"
+        )
+    )
+
+    processed_signature = (
+        st.session_state.get(
+            "processed_file_signature"
+        )
+    )
+
+    return (
+        current_signature is not None
+        and processed_signature is not None
+        and current_signature
+        == processed_signature
+    )
+
+
 def render_correction_ui():
-    """
-    Render the natural-language AI correction workflow.
-    """
+    """Render the natural-language AI correction workflow."""
 
     edited_data = st.session_state.get(
         "edited_data"
     )
 
     if not edited_data:
+        return
+
+    # Do not allow stale correction data to appear when
+    # the selected PDF no longer matches the processed PDF.
+    if not _is_current_document_workflow():
         return
 
     st.divider()
@@ -100,9 +157,9 @@ def render_correction_ui():
         "currently reviewed record."
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # CORRECTION INSTRUCTION
-    # --------------------------------------------------------
+    # ========================================================
 
     correction_instruction = st.text_area(
         "Correction instruction",
@@ -120,34 +177,56 @@ def render_correction_ui():
     )
 
     st.caption(
-        f"Maximum instruction length: "
+        "Maximum instruction length: "
         f"{MAX_CORRECTION_INSTRUCTION_LENGTH} characters."
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # APPLY AI CORRECTION
-    # --------------------------------------------------------
+    # ========================================================
 
     if st.button(
         "🤖 Apply AI Correction",
         key="apply_ai_correction_button",
     ):
 
-        instruction = correction_instruction.strip()
+        instruction = (
+            correction_instruction.strip()
+        )
 
         if not instruction:
+
             st.warning(
                 "Please enter a correction instruction."
             )
+
             return
 
-        if len(instruction) > MAX_CORRECTION_INSTRUCTION_LENGTH:
+        if (
+            len(instruction)
+            > MAX_CORRECTION_INSTRUCTION_LENGTH
+        ):
+
             st.error(
                 "The correction instruction is too long."
             )
+
+            return
+
+        # Re-check document identity immediately before
+        # making the Gemini request.
+        if not _is_current_document_workflow():
+
+            st.error(
+                "The selected PDF no longer matches the "
+                "processed document. Please process the "
+                "selected PDF again."
+            )
+
             return
 
         try:
+
             st.session_state.correction_instruction = (
                 instruction
             )
@@ -155,6 +234,7 @@ def render_correction_ui():
             with st.spinner(
                 "Gemini is applying the requested correction..."
             ):
+
                 corrected_data = (
                     apply_natural_language_correction(
                         edited_data,
@@ -162,12 +242,13 @@ def render_correction_ui():
                     )
                 )
 
-            cleaned_data = _parse_correction_result(
-                corrected_data
+            cleaned_data = (
+                _parse_correction_result(
+                    corrected_data
+                )
             )
 
-            # Clear downstream state before storing the
-            # newly corrected record.
+            # Clear only downstream state.
             reset_after_ai_correction()
 
             st.session_state.corrected_data = (
@@ -193,9 +274,9 @@ def render_correction_ui():
                 "Please try again or make the correction manually."
             )
 
-    # --------------------------------------------------------
+    # ========================================================
     # SHOW CORRECTED DATA
-    # --------------------------------------------------------
+    # ========================================================
 
     corrected_data = st.session_state.get(
         "corrected_data"
@@ -204,13 +285,20 @@ def render_correction_ui():
     if not corrected_data:
         return
 
+    # Never display correction output belonging to a stale
+    # document workflow.
+    if not _is_current_document_workflow():
+        return
+
     st.subheader(
         "🔎 Corrected Data"
     )
 
     for field in EXTRACTION_FIELDS:
 
-        value = corrected_data.get(field)
+        value = corrected_data.get(
+            field
+        )
 
         if value is None:
             value = ""
@@ -222,9 +310,9 @@ def render_correction_ui():
             key=f"corrected_display_{field}",
         )
 
-    # --------------------------------------------------------
+    # ========================================================
     # USE CORRECTED DATA
-    # --------------------------------------------------------
+    # ========================================================
 
     if st.button(
         "Use Corrected Data",
@@ -232,19 +320,38 @@ def render_correction_ui():
         key="use_corrected_data_button",
     ):
 
-        final_corrected_data = corrected_data.copy()
+        # Re-check document identity before promoting the
+        # corrected record into the final workflow.
+        if not _is_current_document_workflow():
 
-        # Clear correction-specific state.
+            st.error(
+                "The selected PDF no longer matches the "
+                "corrected document. Please process the "
+                "selected PDF again."
+            )
+
+            return
+
+        final_corrected_data = (
+            corrected_data.copy()
+        )
+
+        instruction_to_keep = (
+            correction_instruction.strip()
+        )
+
+        # Clear final-verification state before promoting
+        # the corrected record.
         reset_after_ai_correction()
 
-        # Promote the corrected record to the normal
-        # manual-review workflow.
+        # Promote the corrected record into the normal
+        # verification workflow.
         st.session_state.edited_data = (
             final_corrected_data
         )
 
         st.session_state.correction_instruction = (
-            correction_instruction.strip()
+            instruction_to_keep
         )
 
         st.success(
@@ -253,4 +360,3 @@ def render_correction_ui():
         )
 
         st.rerun()
-```
