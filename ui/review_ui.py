@@ -1,33 +1,16 @@
+```python
 import streamlit as st
 
 from config.schema import EXTRACTION_FIELDS
-
 from utils.validation import normalize_record
 from utils.database import DatabaseManager
-
-from ui.common import (
-    reset_after_manual_edit,
-)
+from ui.common import reset_after_manual_edit
 
 
-# ============================================================
-# HELPER
-# ============================================================
-
-def _render_record_fields(
-    data,
-    key_prefix,
-):
-    """
-    Render editable fields for one credential record.
-
-    Returns a dictionary containing the current UI values.
-    """
-
+def _render_record_fields(data, key_prefix):
     edited_data = {}
 
     for field in EXTRACTION_FIELDS:
-
         value = data.get(field)
 
         if value is None:
@@ -42,15 +25,7 @@ def _render_record_fields(
     return edited_data
 
 
-# ============================================================
-# MANUAL REVIEW
-# ============================================================
-
 def render_manual_review():
-    """
-    Render the human review and manual editing stage.
-    """
-
     extracted_data = st.session_state.get(
         "extracted_data"
     )
@@ -64,31 +39,19 @@ def render_manual_review():
 
     st.write(
         "Review the information extracted by Gemini. "
-        "You can correct any field manually before "
-        "continuing."
+        "You can correct any field manually before continuing."
     )
-
-    # --------------------------------------------------------
-    # CURRENT EXTRACTED DATA
-    # --------------------------------------------------------
 
     edited_data = _render_record_fields(
         extracted_data,
         "manual_review",
     )
 
-    # --------------------------------------------------------
-    # APPLY MANUAL EDITS
-    # --------------------------------------------------------
-
     if st.button(
         "Apply Manual Edits",
         key="apply_manual_edits_button",
     ):
-
-        st.session_state.edited_data = (
-            edited_data
-        )
+        st.session_state.edited_data = edited_data
 
         reset_after_manual_edit()
 
@@ -99,15 +62,7 @@ def render_manual_review():
         st.rerun()
 
 
-# ============================================================
-# FINAL VERIFICATION
-# ============================================================
-
 def render_final_verification():
-    """
-    Render the final verification and database save stage.
-    """
-
     edited_data = st.session_state.get(
         "edited_data"
     )
@@ -124,14 +79,9 @@ def render_final_verification():
         "before saving it permanently to the database."
     )
 
-    # --------------------------------------------------------
-    # SHOW FINAL DATA
-    # --------------------------------------------------------
-
     final_data = {}
 
     for field in EXTRACTION_FIELDS:
-
         value = edited_data.get(field)
 
         if value is None:
@@ -145,28 +95,18 @@ def render_final_verification():
 
     st.session_state.final_data = final_data
 
-    # --------------------------------------------------------
-    # CONFIRMATION
-    # --------------------------------------------------------
-
     confirmation = st.checkbox(
         "I have reviewed and verified this record "
         "and confirm that it is ready to be saved.",
         key="final_confirmation_checkbox",
     )
 
-    # --------------------------------------------------------
-    # SAVE TO SUPABASE
-    # --------------------------------------------------------
-
     if st.button(
         "💾 Confirm & Save Record",
         type="primary",
         key="confirm_save_record_button",
     ):
-
         if not confirmation:
-
             st.warning(
                 "Please confirm that you have reviewed "
                 "and verified the record before saving."
@@ -175,18 +115,9 @@ def render_final_verification():
             return
 
         try:
-
-            # ------------------------------------------------
-            # NORMALIZE DATA
-            # ------------------------------------------------
-
             normalized_data = normalize_record(
                 final_data
             )
-
-            # ------------------------------------------------
-            # AUTHENTICATED DATABASE SESSION
-            # ------------------------------------------------
 
             database = DatabaseManager()
 
@@ -203,28 +134,20 @@ def render_final_verification():
                 refresh_token,
             )
 
-            # ------------------------------------------------
-            # SAVE RECORD
-            # ------------------------------------------------
-
-            saved_record = (
-                database.insert_credential(
-                    normalized_data,
-                    document_filename=(
-                        st.session_state.get(
-                            "processed_pdf_name"
-                        )
-                    ),
-                )
+            saved_record = database.insert_credential(
+                normalized_data,
+                document_filename=(
+                    st.session_state.get(
+                        "processed_pdf_name"
+                    )
+                ),
             )
-
-            # ------------------------------------------------
-            # STORE VERIFIED DATA
-            # ------------------------------------------------
 
             st.session_state.verified_data = (
                 normalized_data
             )
+
+            st.session_state.final_confirmation = True
 
             st.success(
                 "✓ Record verified and saved successfully "
@@ -236,31 +159,57 @@ def render_final_verification():
                 f"{saved_record['id']}"
             )
 
-            st.session_state.final_confirmation = (
-                True
+            # ------------------------------------------------
+            # Determine whether another PDF is available.
+            # ------------------------------------------------
+
+            current_index = st.session_state.get(
+                "selected_pdf_index",
+                0,
             )
 
-            st.write(
-                "You can now select another PDF "
-                "from the document list above."
+            total_files = st.session_state.get(
+                "uploaded_file_count",
+                1,
             )
+
+            if current_index + 1 < total_files:
+
+                st.success(
+                    "This document is complete. "
+                    "You can continue with the next PDF."
+                )
+
+                if st.button(
+                    "➡️ Process Next PDF",
+                    type="primary",
+                    key="process_next_pdf_button",
+                ):
+                    st.session_state.advance_to_next_pdf = (
+                        True
+                    )
+
+                    st.rerun()
+
+            else:
+
+                st.success(
+                    "🎉 All selected PDFs have been "
+                    "processed and verified."
+                )
+
+                st.info(
+                    "You can now load your records and "
+                    "download the Excel export."
+                )
 
         except Exception as exc:
-
             st.error(
                 f"Unable to save the record: {exc}"
             )
 
 
-# ============================================================
-# MAIN REVIEW UI
-# ============================================================
-
 def render_review_ui():
-    """
-    Render the complete human review workflow.
-    """
-
     render_manual_review()
-
     render_final_verification()
+```
