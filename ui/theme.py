@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 
 
@@ -138,4 +137,3 @@ def render_workflow():
         st.caption("Save")
 
     st.divider()
-```
