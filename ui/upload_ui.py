@@ -1,3 +1,4 @@
+```python
 import json
 
 import streamlit as st
@@ -12,29 +13,14 @@ from ui.common import (
 )
 
 
-# ============================================================
-# UPLOAD UI
-# ============================================================
-
 def render_upload_ui():
-    """
-    Render the PDF selection and processing workflow.
-
-    Multiple PDFs may be selected, but only the PDF explicitly
-    chosen by the user is processed.
-    """
-
     st.header("📥 Select Credential Documents")
 
     st.write(
-        "You may select multiple PDFs. "
-        "Only the PDF you explicitly choose to process "
-        "will be sent for extraction."
+        "Select multiple PDFs and process them one by one. "
+        "Each document must be reviewed and verified before "
+        "it is permanently saved."
     )
-
-    # --------------------------------------------------------
-    # PDF UPLOADER
-    # --------------------------------------------------------
 
     uploaded_files = st.file_uploader(
         "Select PDF documents",
@@ -46,9 +32,12 @@ def render_upload_ui():
     if not uploaded_files:
         return
 
-    # --------------------------------------------------------
-    # STORE SELECTED FILE NAMES
-    # --------------------------------------------------------
+    # Store the number of uploaded documents so that
+    # the review module can determine whether another
+    # document is available.
+    st.session_state.uploaded_file_count = len(
+        uploaded_files
+    )
 
     current_file_names = [
         file.name
@@ -60,17 +49,49 @@ def render_upload_ui():
     )
 
     if previous_file_names != current_file_names:
-
         st.session_state.selected_file_names = (
             current_file_names
         )
 
         st.session_state.selected_pdf_index = 0
 
+        st.session_state.processing_complete = False
+
         reset_current_document_workflow()
 
     # --------------------------------------------------------
-    # SELECT CURRENT PDF
+    # Advance to next PDF after successful save
+    # --------------------------------------------------------
+
+    if st.session_state.get(
+        "advance_to_next_pdf",
+        False,
+    ):
+        st.session_state.advance_to_next_pdf = False
+
+        current_index = st.session_state.get(
+            "selected_pdf_index",
+            0,
+        )
+
+        next_index = current_index + 1
+
+        if next_index < len(uploaded_files):
+            st.session_state.selected_pdf_index = (
+                next_index
+            )
+
+            st.session_state.processing_complete = False
+
+            reset_current_document_workflow()
+
+        else:
+            st.session_state.processing_complete = True
+
+            reset_current_document_workflow()
+
+    # --------------------------------------------------------
+    # Document selector
     # --------------------------------------------------------
 
     file_options = [
@@ -89,25 +110,21 @@ def render_upload_ui():
         key="active_pdf_selector",
     )
 
-    # --------------------------------------------------------
-    # HANDLE PDF SWITCH
-    # --------------------------------------------------------
-
     previous_index = st.session_state.get(
         "selected_pdf_index",
         0,
     )
 
     if selected_index != previous_index:
-
         st.session_state.selected_pdf_index = (
             selected_index
         )
 
+        st.session_state.processing_complete = False
+
         reset_current_document_workflow()
 
     else:
-
         st.session_state.selected_pdf_index = (
             selected_index
         )
@@ -115,15 +132,34 @@ def render_upload_ui():
     current_file = uploaded_files[selected_index]
 
     # --------------------------------------------------------
-    # CURRENT PDF INFORMATION
+    # Progress information
     # --------------------------------------------------------
 
+    total_files = len(uploaded_files)
+
+    display_number = selected_index + 1
+
     st.info(
-        f"Current PDF: **{current_file.name}**"
+        f"📄 Document {display_number} of {total_files}: "
+        f"**{current_file.name}**"
     )
 
     # --------------------------------------------------------
-    # PROCESS CURRENT PDF
+    # Processing progress
+    # --------------------------------------------------------
+
+    if total_files > 1:
+        st.progress(
+            display_number / total_files
+        )
+
+        st.caption(
+            f"Processing queue: {display_number} / "
+            f"{total_files} documents"
+        )
+
+    # --------------------------------------------------------
+    # Process current PDF
     # --------------------------------------------------------
 
     if st.button(
@@ -131,61 +167,32 @@ def render_upload_ui():
         type="primary",
         key="process_current_pdf_button",
     ):
-
         try:
-
-            # ------------------------------------------------
-            # VALIDATE PDF
-            # ------------------------------------------------
-
             validate_pdf(current_file)
 
-            # ------------------------------------------------
-            # RESET OLD EXTRACTION WORKFLOW
-            # ------------------------------------------------
-
             reset_after_new_extraction()
-
-            # ------------------------------------------------
-            # EXTRACT TEXT / OCR
-            # ------------------------------------------------
 
             with st.spinner(
                 "Reading PDF and extracting text..."
             ):
-
                 extracted_text = extract_text_from_pdf(
                     current_file
                 )
 
             if not extracted_text:
-
                 raise ValueError(
                     "No readable text was extracted from "
                     "the selected PDF."
                 )
 
-            # ------------------------------------------------
-            # GEMINI STRUCTURED EXTRACTION
-            # ------------------------------------------------
-
             with st.spinner(
                 "Gemini is extracting credential data..."
             ):
-
                 extracted_data = extract_structured_data(
                     extracted_text
                 )
 
-            # ------------------------------------------------
-            # PARSE JSON IF NECESSARY
-            # ------------------------------------------------
-
-            if isinstance(
-                extracted_data,
-                str,
-            ):
-
+            if isinstance(extracted_data, str):
                 extracted_data = json.loads(
                     extracted_data
                 )
@@ -194,15 +201,9 @@ def render_upload_ui():
                 extracted_data,
                 dict,
             ):
-
                 raise ValueError(
-                    "Gemini returned an invalid extraction "
-                    "format."
+                    "Gemini returned an invalid extraction format."
                 )
-
-            # ------------------------------------------------
-            # STORE TEMPORARY WORKFLOW DATA
-            # ------------------------------------------------
 
             st.session_state.processed_pdf_name = (
                 current_file.name
@@ -220,6 +221,10 @@ def render_upload_ui():
                 extracted_data.copy()
             )
 
+            st.session_state.processing_complete = (
+                False
+            )
+
             st.success(
                 f"PDF processed successfully: "
                 f"{current_file.name}"
@@ -228,33 +233,30 @@ def render_upload_ui():
             st.rerun()
 
         except json.JSONDecodeError:
-
             st.error(
                 "Gemini returned data that could not "
                 "be interpreted as valid JSON."
             )
 
         except Exception as exc:
-
             st.error(
                 f"PDF processing failed: {exc}"
             )
 
     # --------------------------------------------------------
-    # SHOW EXTRACTED TEXT
+    # Extracted text
     # --------------------------------------------------------
 
     if st.session_state.get(
         "extracted_text"
     ):
-
         st.divider()
 
         with st.expander(
             "📄 View Extracted Text",
             expanded=False,
         ):
-
             st.text(
                 st.session_state.extracted_text
             )
+```
