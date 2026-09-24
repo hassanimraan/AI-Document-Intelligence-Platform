@@ -1,3 +1,10 @@
+from ui.theme import (
+    apply_app_theme,
+    render_ai_hero,
+    render_status_cards,
+    render_workflow,
+)
+
 import streamlit as st
 
 from ui.auth_ui import (
@@ -17,11 +24,13 @@ from ui.records_ui import render_records_ui
 # ============================================================
 
 st.set_page_config(
+    
     page_title="Credential Extraction Chatbot",
     page_icon="📄",
     layout="wide",
 )
 
+apply_app_theme()
 
 # ============================================================
 # SUPABASE CLIENT
@@ -46,15 +55,9 @@ if not authenticated:
 # APPLICATION HEADER
 # ============================================================
 
-st.title(
-    "📄 Credential Extraction Chatbot"
-)
-
-st.caption(
-    "AI-powered document extraction, human verification, "
-    "and persistent credential management."
-)
-
+render_ai_hero()
+render_status_cards()
+render_workflow()
 
 # ============================================================
 # USER INFORMATION / LOGOUT
