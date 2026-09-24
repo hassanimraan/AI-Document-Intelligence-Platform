@@ -313,7 +313,7 @@ def apply_app_theme():
 
 def render_ai_hero():
     """Render the main AI application header."""
-
+```python
     st.markdown(
         """
         <div class="ai-hero">
