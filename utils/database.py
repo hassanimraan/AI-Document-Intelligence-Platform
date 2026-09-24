@@ -1,65 +1,166 @@
+```python
 import streamlit as st
 from supabase import create_client
 
+from config.schema import EXTRACTION_FIELDS
+
 
 class DatabaseManager:
-    """Handles authenticated access to Supabase PostgreSQL."""
+    """
+    Handles authenticated access to Supabase PostgreSQL.
+
+    Normal application operations use the Supabase publishable
+    key together with the authenticated user's session.
+
+    RLS remains the database-level security boundary.
+    """
+
+    TABLE_NAME = "credentials"
 
     def __init__(self):
         self.url = st.secrets["SUPABASE_URL"]
-        self.key = st.secrets["SUPABASE_PUBLISHABLE_KEY"]
+        self.key = st.secrets[
+            "SUPABASE_PUBLISHABLE_KEY"
+        ]
 
         self.supabase = create_client(
             self.url,
-            self.key
+            self.key,
         )
+
+    # ========================================================
+    # AUTHENTICATION
+    # ========================================================
 
     def set_user_session(
         self,
         access_token,
-        refresh_token
+        refresh_token,
     ):
-        """Attach the authenticated Supabase session."""
+        """
+        Attach the authenticated Supabase session.
 
-        if not access_token or not refresh_token:
+        The access and refresh tokens are supplied by the
+        application's authentication workflow.
+        """
+
+        if not access_token:
             raise ValueError(
-                "Valid authentication tokens are required."
+                "Access token is missing."
             )
 
-        self.supabase.auth.set_session(
-            access_token,
-            refresh_token
-        )
+        if not refresh_token:
+            raise ValueError(
+                "Refresh token is missing."
+            )
+
+        try:
+            self.supabase.auth.set_session(
+                access_token,
+                refresh_token,
+            )
+
+        except Exception as exc:
+            raise ValueError(
+                "Your authentication session could not "
+                "be restored. Please log in again."
+            ) from exc
 
     def get_current_user(self):
-        """Return the currently authenticated user."""
+        """
+        Return the currently authenticated Supabase user.
 
-        response = self.supabase.auth.get_user()
+        get_user() is used instead of trusting user information
+        supplied by the UI.
+        """
 
-        return response.user
+        try:
+            response = (
+                self.supabase.auth.get_user()
+            )
+
+        except Exception as exc:
+            raise ValueError(
+                "Unable to verify the authenticated user. "
+                "Please log in again."
+            ) from exc
+
+        user = response.user
+
+        if user is None:
+            raise ValueError(
+                "No authenticated user was found."
+            )
+
+        return user
+
+    # ========================================================
+    # RECORD VALIDATION
+    # ========================================================
+
+    def _validate_record(self, record):
+        """
+        Validate the structure of a credential record before
+        sending it to Supabase.
+        """
+
+        if not isinstance(record, dict):
+            raise TypeError(
+                "Credential record must be a dictionary."
+            )
+
+        unexpected_fields = (
+            set(record.keys())
+            - set(EXTRACTION_FIELDS)
+        )
+
+        if unexpected_fields:
+            raise ValueError(
+                "Credential record contains unexpected "
+                f"fields: {sorted(unexpected_fields)}"
+            )
+
+    # ========================================================
+    # INSERT
+    # ========================================================
 
     def insert_credential(
         self,
         record,
-        document_filename=None
+        document_filename=None,
     ):
         """
         Insert a verified credential record.
 
-        user_id is obtained from the authenticated
-        Supabase user and is never accepted from
-        the UI as a user-supplied value.
+        user_id is ALWAYS obtained from the authenticated
+        Supabase user.
+
+        The UI can never supply or override user_id.
         """
+
+        self._validate_record(
+            record
+        )
 
         user = self.get_current_user()
 
-        if user is None:
+        user_id = getattr(
+            user,
+            "id",
+            None,
+        )
+
+        if not user_id:
             raise ValueError(
-                "No authenticated user found."
+                "Authenticated user ID is unavailable."
             )
 
+        # ----------------------------------------------------
+        # Only map known application fields.
+        # ----------------------------------------------------
+
         row = {
-            "user_id": user.id,
+            "user_id": user_id,
 
             "client_pma": record.get(
                 "Client (PMA)"
@@ -101,61 +202,117 @@ class DatabaseManager:
                 "Approved by"
             ),
 
-            "document_filename": document_filename,
+            "document_filename": (
+                document_filename
+                if document_filename
+                else None
+            ),
         }
 
-        response = (
-            self.supabase
-            .table("credentials")
-            .insert(row)
-            .execute()
-        )
+        try:
+
+            response = (
+                self.supabase
+                .table(self.TABLE_NAME)
+                .insert(row)
+                .execute()
+            )
+
+        except Exception as exc:
+
+            raise ValueError(
+                "The credential record could not be saved "
+                "to the database."
+            ) from exc
 
         if not response.data:
+
             raise ValueError(
-                "Database insert returned no data."
+                "The database did not return the saved "
+                "credential record."
             )
 
         return response.data[0]
 
+    # ========================================================
+    # RETRIEVE
+    # ========================================================
+
     def get_user_credentials(self):
         """
-        Retrieve credentials belonging to the
-        authenticated user.
+        Retrieve credentials belonging to the authenticated
+        user.
 
-        RLS provides the database-level isolation.
+        RLS performs the actual database-level isolation.
         """
 
-        response = (
-            self.supabase
-            .table("credentials")
-            .select("*")
-            .order(
-                "created_at",
-                desc=True
-            )
-            .execute()
-        )
+        # Force authentication verification before querying.
+        self.get_current_user()
 
-        return response.data
+        try:
+
+            response = (
+                self.supabase
+                .table(self.TABLE_NAME)
+                .select("*")
+                .order(
+                    "created_at",
+                    desc=True,
+                )
+                .execute()
+            )
+
+        except Exception as exc:
+
+            raise ValueError(
+                "Your credential records could not be loaded "
+                "from the database."
+            ) from exc
+
+        return response.data or []
+
+    # ========================================================
+    # DELETE
+    # ========================================================
 
     def delete_credential(
         self,
-        credential_id
+        credential_id,
     ):
-        """Delete one credential belonging to the user."""
+        """
+        Delete one credential.
+
+        The authenticated user's RLS policy determines whether
+        the requested record actually belongs to that user.
+        """
 
         if not credential_id:
             raise ValueError(
                 "Credential ID is required."
             )
 
-        response = (
-            self.supabase
-            .table("credentials")
-            .delete()
-            .eq("id", credential_id)
-            .execute()
-        )
+        # Ensure a valid authenticated user exists before
+        # attempting the database operation.
+        self.get_current_user()
 
-        return response.data
+        try:
+
+            response = (
+                self.supabase
+                .table(self.TABLE_NAME)
+                .delete()
+                .eq(
+                    "id",
+                    credential_id,
+                )
+                .execute()
+            )
+
+        except Exception as exc:
+
+            raise ValueError(
+                "The credential record could not be deleted."
+            ) from exc
+
+        return response.data or []
+```
