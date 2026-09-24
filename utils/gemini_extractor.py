@@ -9,6 +9,10 @@ from google.genai import types
 from config.schema import EXTRACTION_FIELDS
 
 
+# -------------------------------------------------------------------
+# Gemini model configuration
+# -------------------------------------------------------------------
+
 MODEL_PRIORITY = [
     "gemini-3.8-flash",
     "gemini-3.7-flash",
@@ -16,9 +20,17 @@ MODEL_PRIORITY = [
     "gemini-3.5-flash",
 ]
 
-MAX_ATTEMPTS_PER_MODEL = 3
+# Maximum number of retries for temporary errors.
+# This is deliberately low to prevent unnecessary API usage.
+MAX_TRANSIENT_RETRIES = 1
+
+# Initial delay before a controlled retry.
 RETRY_DELAY_SECONDS = 2
 
+
+# -------------------------------------------------------------------
+# Gemini client
+# -------------------------------------------------------------------
 
 def get_gemini_client():
     """Create and return the Gemini client."""
@@ -29,10 +41,16 @@ def get_gemini_client():
     )
 
     if not api_key:
-        raise ValueError("GEMINI_API_KEY is not configured.")
+        raise ValueError(
+            "GEMINI_API_KEY is not configured."
+        )
 
     return genai.Client(api_key=api_key)
 
+
+# -------------------------------------------------------------------
+# Model discovery
+# -------------------------------------------------------------------
 
 def get_available_models(client):
     """Return supported priority Gemini models."""
@@ -43,7 +61,10 @@ def get_available_models(client):
         models = client.models.list()
 
         for model in models:
-            model_name = model.name.replace("models/", "")
+            model_name = model.name.replace(
+                "models/",
+                ""
+            )
 
             supported_methods = getattr(
                 model,
@@ -82,46 +103,458 @@ def get_gemini_model():
     )
 
 
-def test_gemini_connection():
-    """Test Gemini connectivity with fallback and retries."""
+def _get_model_sequence(available_models):
+    """
+    Build a controlled model sequence.
 
-    client = get_gemini_client()
-    available_models = get_available_models(client)
+    The configured model is attempted first, followed by the
+    remaining priority models.
 
-    if not available_models:
+    Model fallback is only used when the current model is
+    unavailable or temporarily unavailable. It is NOT used
+    after a daily quota exhaustion.
+    """
+
+    configured_model = get_gemini_model()
+
+    ordered_models = []
+
+    if configured_model in available_models:
+        ordered_models.append(configured_model)
+
+    for model_name in available_models:
+        if model_name not in ordered_models:
+            ordered_models.append(model_name)
+
+    return ordered_models
+
+
+# -------------------------------------------------------------------
+# Error classification
+# -------------------------------------------------------------------
+
+def _get_exception_status_code(exc):
+    """
+    Attempt to retrieve an HTTP/status code from a Gemini exception.
+    """
+
+    for attribute in (
+        "status_code",
+        "code",
+        "http_status",
+    ):
+        value = getattr(exc, attribute, None)
+
+        if isinstance(value, int):
+            return value
+
+    return None
+
+
+def _classify_gemini_error(exc):
+    """
+    Classify a Gemini exception into a controlled application
+    action.
+
+    Possible actions:
+
+    - quota_exhausted
+    - rate_limit
+    - service_unavailable
+    - not_found
+    - bad_request
+    - authentication
+    - permission
+    - server_error
+    - other
+    """
+
+    message = str(exc).lower()
+
+    status_code = _get_exception_status_code(exc)
+
+    # ---------------------------------------------------------------
+    # Daily quota exhaustion
+    # ---------------------------------------------------------------
+
+    if (
+        "quota exceeded" in message
+        or "quota_exceeded" in message
+        or "generate_content_free_tier_requests" in message
+        or "daily quota" in message
+        or "daily limit" in message
+    ):
+        return "quota_exhausted"
+
+    # ---------------------------------------------------------------
+    # HTTP 429
+    # ---------------------------------------------------------------
+
+    if status_code == 429:
+        if (
+            "quota" in message
+            or "daily" in message
+            or "resource_exhausted" in message
+        ):
+            return "quota_exhausted"
+
+        return "rate_limit"
+
+    # Some SDK versions may not expose status_code directly.
+    if (
+        "429" in message
+        and (
+            "rate limit" in message
+            or "too many requests" in message
+        )
+    ):
+        return "rate_limit"
+
+    # ---------------------------------------------------------------
+    # HTTP 503
+    # ---------------------------------------------------------------
+
+    if status_code == 503:
+        return "service_unavailable"
+
+    if (
+        "503" in message
+        or "service unavailable" in message
+        or "temporarily unavailable" in message
+        or "high demand" in message
+    ):
+        return "service_unavailable"
+
+    # ---------------------------------------------------------------
+    # HTTP 404 / model unavailable
+    # ---------------------------------------------------------------
+
+    if status_code == 404:
+        return "not_found"
+
+    if (
+        "404" in message
+        or "not found" in message
+        or "model not found" in message
+    ):
+        return "not_found"
+
+    # ---------------------------------------------------------------
+    # HTTP 400
+    # ---------------------------------------------------------------
+
+    if status_code == 400:
+        return "bad_request"
+
+    if (
+        "400" in message
+        or "invalid argument" in message
+        or "invalid request" in message
+        or "bad request" in message
+        or "schema" in message
+    ):
+        return "bad_request"
+
+    # ---------------------------------------------------------------
+    # HTTP 401
+    # ---------------------------------------------------------------
+
+    if status_code == 401:
+        return "authentication"
+
+    if (
+        "401" in message
+        or "unauthorized" in message
+        or "api key" in message
+    ):
+        return "authentication"
+
+    # ---------------------------------------------------------------
+    # HTTP 403
+    # ---------------------------------------------------------------
+
+    if status_code == 403:
+        return "permission"
+
+    if (
+        "403" in message
+        or "permission denied" in message
+        or "forbidden" in message
+    ):
+        return "permission"
+
+    # ---------------------------------------------------------------
+    # HTTP 500 / 504
+    # ---------------------------------------------------------------
+
+    if status_code in (500, 504):
+        return "server_error"
+
+    if (
+        "500" in message
+        or "internal server error" in message
+        or "504" in message
+        or "deadline exceeded" in message
+        or "timeout" in message
+    ):
+        return "server_error"
+
+    return "other"
+
+
+# -------------------------------------------------------------------
+# Error messages
+# -------------------------------------------------------------------
+
+def _build_quota_error_message():
+    """Return a user-friendly daily quota message."""
+
+    return (
+        "Gemini daily quota has been reached. "
+        "No additional Gemini requests will be attempted. "
+        "Please try again after the quota resets or "
+        "update the Gemini API usage/billing tier."
+    )
+
+
+def _build_failure_message(operation, errors):
+    """Build a concise technical failure message."""
+
+    details = "\n".join(errors)
+
+    return (
+        f"{operation} failed.\n\n"
+        f"Gemini request details:\n"
+        f"{details}"
+    )
+
+
+# -------------------------------------------------------------------
+# Generic controlled Gemini request runner
+# -------------------------------------------------------------------
+
+def _generate_content_with_policy(
+    client,
+    model_sequence,
+    contents,
+    config=None,
+    operation="Gemini request",
+):
+    """
+    Execute a Gemini generation request using a controlled
+    API usage policy.
+
+    IMPORTANT:
+
+    This function intentionally does NOT perform the old
+    model × retry multiplication.
+
+    Daily quota exhaustion stops immediately.
+
+    Temporary rate limits get one retry.
+
+    Temporary service errors get one retry before moving
+    to the next available model.
+
+    Model-not-found errors move directly to the next model.
+    """
+
+    if not model_sequence:
         raise RuntimeError(
-            "None of the configured Gemini models are currently available."
+            "No Gemini models are available."
         )
 
     errors = []
 
-    for model_name in available_models:
-        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
+    for model_name in model_sequence:
+
+        transient_retry_count = 0
+
+        while True:
             try:
                 response = client.models.generate_content(
                     model=model_name,
-                    contents=(
-                        "Reply with exactly: "
-                        "Gemini connection successful."
-                    ),
+                    contents=contents,
+                    config=config,
                 )
 
-                if response.text:
-                    return response.text
+                if not getattr(response, "text", None):
+                    raise ValueError(
+                        "Gemini returned an empty response."
+                    )
+
+                return response
 
             except Exception as exc:
+
+                error_type = _classify_gemini_error(exc)
+
                 errors.append(
-                    f"{model_name} attempt {attempt}: {exc}"
+                    f"{model_name}: {error_type}: {exc}"
                 )
 
-                if attempt < MAX_ATTEMPTS_PER_MODEL:
-                    time.sleep(RETRY_DELAY_SECONDS)
+                # ---------------------------------------------------
+                # DAILY QUOTA
+                # ---------------------------------------------------
+
+                if error_type == "quota_exhausted":
+                    raise RuntimeError(
+                        _build_quota_error_message()
+                    ) from exc
+
+                # ---------------------------------------------------
+                # AUTHENTICATION
+                # ---------------------------------------------------
+
+                if error_type == "authentication":
+                    raise RuntimeError(
+                        "Gemini authentication failed. "
+                        "Please verify the GEMINI_API_KEY."
+                    ) from exc
+
+                # ---------------------------------------------------
+                # PERMISSION
+                # ---------------------------------------------------
+
+                if error_type == "permission":
+                    raise RuntimeError(
+                        "Gemini API permission was denied. "
+                        "Please check the API key and project permissions."
+                    ) from exc
+
+                # ---------------------------------------------------
+                # INVALID REQUEST
+                # ---------------------------------------------------
+
+                if error_type == "bad_request":
+                    raise RuntimeError(
+                        f"{operation} was rejected as an invalid request. "
+                        "The application will not retry this request.\n\n"
+                        f"Details: {exc}"
+                    ) from exc
+
+                # ---------------------------------------------------
+                # RATE LIMIT
+                # ---------------------------------------------------
+
+                if error_type == "rate_limit":
+
+                    if transient_retry_count < MAX_TRANSIENT_RETRIES:
+
+                        transient_retry_count += 1
+
+                        time.sleep(
+                            RETRY_DELAY_SECONDS
+                        )
+
+                        continue
+
+                    raise RuntimeError(
+                        f"{operation} was temporarily rate-limited. "
+                        "The application made one controlled retry "
+                        "and stopped to avoid unnecessary API usage.\n\n"
+                        f"Details: {exc}"
+                    ) from exc
+
+                # ---------------------------------------------------
+                # TEMPORARY SERVICE UNAVAILABLE
+                # ---------------------------------------------------
+
+                if error_type == "service_unavailable":
+
+                    if transient_retry_count < MAX_TRANSIENT_RETRIES:
+
+                        transient_retry_count += 1
+
+                        time.sleep(
+                            RETRY_DELAY_SECONDS
+                        )
+
+                        continue
+
+                    # One controlled retry failed.
+                    # Move to the next available model.
+                    break
+
+                # ---------------------------------------------------
+                # MODEL NOT FOUND
+                # ---------------------------------------------------
+
+                if error_type == "not_found":
+                    break
+
+                # ---------------------------------------------------
+                # SERVER ERROR
+                # ---------------------------------------------------
+
+                if error_type == "server_error":
+
+                    if transient_retry_count < MAX_TRANSIENT_RETRIES:
+
+                        transient_retry_count += 1
+
+                        time.sleep(
+                            RETRY_DELAY_SECONDS
+                        )
+
+                        continue
+
+                    break
+
+                # ---------------------------------------------------
+                # UNKNOWN ERROR
+                # ---------------------------------------------------
+
+                raise RuntimeError(
+                    _build_failure_message(
+                        operation,
+                        errors,
+                    )
+                ) from exc
 
     raise RuntimeError(
-        "Gemini connection failed after all model/retry attempts.\n"
-        + "\n".join(errors)
+        _build_failure_message(
+            operation,
+            errors,
+        )
     )
 
+
+# -------------------------------------------------------------------
+# Gemini connection test
+# -------------------------------------------------------------------
+
+def test_gemini_connection():
+    """
+    Test Gemini connectivity with minimal API usage.
+
+    Only the configured model is tested.
+
+    This function intentionally does not cycle through every
+    model because a connection test should not consume quota
+    unnecessarily.
+    """
+
+    client = get_gemini_client()
+
+    configured_model = get_gemini_model()
+
+    response = _generate_content_with_policy(
+        client=client,
+        model_sequence=[configured_model],
+        contents=(
+            "Reply with exactly: "
+            "Gemini connection successful."
+        ),
+        operation="Gemini connection test",
+    )
+
+    return response.text
+
+
+# -------------------------------------------------------------------
+# Structured extraction schema
+# -------------------------------------------------------------------
 
 def _build_extraction_schema():
     """Build the Gemini JSON schema."""
@@ -140,19 +573,37 @@ def _build_extraction_schema():
     }
 
 
+# -------------------------------------------------------------------
+# Structured document extraction
+# -------------------------------------------------------------------
+
 def extract_structured_data(document_text):
-    """Extract the required fields from document text."""
+    """
+    Extract the required fields from document text.
+
+    Normal operation uses one Gemini generation request.
+
+    Additional requests occur only when a temporary service
+    problem requires controlled retry/fallback.
+    """
 
     if not document_text or not document_text.strip():
-        raise ValueError("No document text was provided.")
+        raise ValueError(
+            "No document text was provided."
+        )
 
     client = get_gemini_client()
+
     available_models = get_available_models(client)
 
     if not available_models:
         raise RuntimeError(
             "None of the configured Gemini models are currently available."
         )
+
+    model_sequence = _get_model_sequence(
+        available_models
+    )
 
     schema = _build_extraction_schema()
 
@@ -183,47 +634,35 @@ Document:
 ----------------
 """
 
-    errors = []
-
-    for model_name in available_models:
-        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=schema,
-                    ),
-                )
-
-                if response.text:
-                    return response.text
-
-                raise ValueError(
-                    "Gemini returned an empty response."
-                )
-
-            except Exception as exc:
-                errors.append(
-                    f"{model_name} attempt {attempt}: {exc}"
-                )
-
-                if attempt < MAX_ATTEMPTS_PER_MODEL:
-                    time.sleep(RETRY_DELAY_SECONDS)
-
-    raise RuntimeError(
-        "Structured Gemini extraction failed after all "
-        "model/retry attempts.\n"
-        + "\n".join(errors)
+    response = _generate_content_with_policy(
+        client=client,
+        model_sequence=model_sequence,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=schema,
+        ),
+        operation="Structured Gemini extraction",
     )
 
+    return response.text
+
+
+# -------------------------------------------------------------------
+# OCR
+# -------------------------------------------------------------------
 
 def extract_text_from_image(
     image_bytes,
-    mime_type="image/png"
+    mime_type="image/png",
 ):
-    """Extract text from a scanned document page using Gemini Vision."""
+    """
+    Extract text from a scanned document page using Gemini Vision.
+
+    Each scanned page requires a Gemini request.
+
+    The same intelligent retry/quota policy is applied.
+    """
 
     if not image_bytes:
         raise ValueError(
@@ -231,12 +670,17 @@ def extract_text_from_image(
         )
 
     client = get_gemini_client()
+
     available_models = get_available_models(client)
 
     if not available_models:
         raise RuntimeError(
             "None of the configured Gemini models are currently available."
         )
+
+    model_sequence = _get_model_sequence(
+        available_models
+    )
 
     prompt = """
 You are an OCR system processing a scanned business document.
@@ -254,55 +698,42 @@ Rules:
 6. Return plain text only.
 """
 
-    errors = []
-
-    for model_name in available_models:
-        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
-            try:
-                image_part = types.Part.from_bytes(
-                    data=image_bytes,
-                    mime_type=mime_type,
-                )
-
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=[
-                        image_part,
-                        prompt,
-                    ],
-                )
-
-                if response.text:
-                    return response.text
-
-                raise ValueError(
-                    "Gemini OCR returned an empty response."
-                )
-
-            except Exception as exc:
-                errors.append(
-                    f"{model_name} attempt {attempt}: {exc}"
-                )
-
-                if attempt < MAX_ATTEMPTS_PER_MODEL:
-                    time.sleep(RETRY_DELAY_SECONDS)
-
-    raise RuntimeError(
-        "Gemini OCR failed after all model/retry attempts.\n"
-        + "\n".join(errors)
+    image_part = types.Part.from_bytes(
+        data=image_bytes,
+        mime_type=mime_type,
     )
 
+    response = _generate_content_with_policy(
+        client=client,
+        model_sequence=model_sequence,
+        contents=[
+            image_part,
+            prompt,
+        ],
+        operation="Gemini OCR",
+    )
+
+    return response.text
+
+
+# -------------------------------------------------------------------
+# Natural-language correction
+# -------------------------------------------------------------------
 
 def apply_natural_language_correction(
     current_record,
-    correction_instruction
+    correction_instruction,
 ):
     """
     Apply a user's natural-language correction
     to the current extracted record.
 
     The corrected record is returned for human review.
+
     Nothing is saved to the database here.
+
+    This function is called ONLY when the user explicitly
+    requests AI correction.
     """
 
     if not isinstance(current_record, dict):
@@ -319,7 +750,9 @@ def apply_natural_language_correction(
         )
 
     current_data = {
-        field: str(current_record.get(field, ""))
+        field: str(
+            current_record.get(field, "")
+        )
         for field in EXTRACTION_FIELDS
     }
 
@@ -362,6 +795,7 @@ Return the corrected record only.
 """
 
     client = get_gemini_client()
+
     available_models = get_available_models(client)
 
     if not available_models:
@@ -369,60 +803,47 @@ Return the corrected record only.
             "None of the configured Gemini models are currently available."
         )
 
-    errors = []
-
-    for model_name in available_models:
-        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=schema,
-                    ),
-                )
-
-                if not response.text:
-                    raise ValueError(
-                        "Gemini returned an empty correction response."
-                    )
-
-                corrected_record = json.loads(
-                    response.text
-                )
-
-                unexpected_fields = (
-                    set(corrected_record.keys())
-                    - set(EXTRACTION_FIELDS)
-                )
-
-                if unexpected_fields:
-                    raise ValueError(
-                        "Gemini returned unexpected fields: "
-                        f"{sorted(unexpected_fields)}"
-                    )
-
-                corrected_record = {
-                    field: str(
-                        corrected_record.get(field, "")
-                    )
-                    for field in EXTRACTION_FIELDS
-                }
-
-                return corrected_record
-
-            except Exception as exc:
-                errors.append(
-                    f"{model_name} attempt {attempt}: {exc}"
-                )
-
-                if attempt < MAX_ATTEMPTS_PER_MODEL:
-                    time.sleep(RETRY_DELAY_SECONDS)
-
-    raise RuntimeError(
-        "Natural-language correction failed after all "
-        "model/retry attempts.\n"
-        + "\n".join(errors)
+    model_sequence = _get_model_sequence(
+        available_models
     )
 
+    response = _generate_content_with_policy(
+        client=client,
+        model_sequence=model_sequence,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=schema,
+        ),
+        operation="Natural-language Gemini correction",
+    )
+
+    try:
+        corrected_record = json.loads(
+            response.text
+        )
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "Gemini returned correction data "
+            "that could not be interpreted as valid JSON."
+        ) from exc
+
+    unexpected_fields = (
+        set(corrected_record.keys())
+        - set(EXTRACTION_FIELDS)
+    )
+
+    if unexpected_fields:
+        raise ValueError(
+            "Gemini returned unexpected fields: "
+            f"{sorted(unexpected_fields)}"
+        )
+
+    corrected_record = {
+        field: str(
+            corrected_record.get(field, "")
+        )
+        for field in EXTRACTION_FIELDS
+    }
+
+    return corrected_record
