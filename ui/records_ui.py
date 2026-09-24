@@ -1,4 +1,3 @@
-```python
 import io
 from datetime import date, datetime
 
@@ -465,4 +464,3 @@ def render_records_ui():
             "Unable to create the Excel export. "
             "Please try loading the records again."
         )
-```
