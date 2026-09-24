@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 
 
@@ -29,7 +30,7 @@ def apply_app_theme():
         }
 
         /* =========================================================
-           MAIN TITLE
+           AI HERO
         ========================================================= */
 
         .ai-hero {
@@ -50,6 +51,7 @@ def apply_app_theme():
 
         .ai-hero h1 {
             margin: 0;
+            color: white !important;
             font-size: 2.25rem;
             font-weight: 800;
             letter-spacing: -0.5px;
@@ -57,6 +59,7 @@ def apply_app_theme():
 
         .ai-hero p {
             margin: 0.45rem 0 0 0;
+            color: white !important;
             font-size: 1rem;
             opacity: 0.92;
         }
@@ -66,35 +69,28 @@ def apply_app_theme():
             margin-bottom: 0.7rem;
             padding: 0.28rem 0.75rem;
             border-radius: 999px;
-            background: rgba(255,255,255,0.18);
-            border: 1px solid rgba(255,255,255,0.28);
+            background: rgba(255, 255, 255, 0.18);
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            color: white;
             font-size: 0.78rem;
             font-weight: 700;
             letter-spacing: 0.4px;
         }
 
         /* =========================================================
-           SECTION HEADERS
-           ========================================================= */
+           HEADINGS
+        ========================================================= */
 
-        h1, h2, h3 {
+        h1,
+        h2,
+        h3 {
             color: #172554;
             font-weight: 750;
         }
 
-        .section-card {
-            padding: 1.25rem 1.4rem;
-            margin: 1rem 0;
-            border-radius: 16px;
-            background: rgba(255,255,255,0.88);
-            border: 1px solid #dbe7f5;
-            box-shadow:
-                0 5px 18px rgba(15, 23, 42, 0.05);
-        }
-
         /* =========================================================
            STATUS CARDS
-           ========================================================= */
+        ========================================================= */
 
         .status-grid {
             display: grid;
@@ -107,7 +103,7 @@ def apply_app_theme():
         .status-card {
             padding: 1rem;
             border-radius: 15px;
-            background: rgba(255,255,255,0.9);
+            background: rgba(255, 255, 255, 0.9);
             border: 1px solid #dbe7f5;
             box-shadow:
                 0 5px 16px rgba(15, 23, 42, 0.05);
@@ -130,7 +126,7 @@ def apply_app_theme():
 
         /* =========================================================
            WORKFLOW
-           ========================================================= */
+        ========================================================= */
 
         .workflow {
             display: flex;
@@ -159,7 +155,7 @@ def apply_app_theme():
 
         /* =========================================================
            FILE UPLOADER
-           ========================================================= */
+        ========================================================= */
 
         [data-testid="stFileUploader"] {
             background:
@@ -181,13 +177,13 @@ def apply_app_theme():
         }
 
         [data-testid="stFileUploaderDropzone"] {
-            background: rgba(255,255,255,0.72);
+            background: rgba(255, 255, 255, 0.72);
             border-radius: 12px;
         }
 
         /* =========================================================
            SELECTBOX
-           ========================================================= */
+        ========================================================= */
 
         [data-testid="stSelectbox"] label {
             color: #172554 !important;
@@ -202,7 +198,7 @@ def apply_app_theme():
 
         /* =========================================================
            BUTTONS
-           ========================================================= */
+        ========================================================= */
 
         .stButton > button {
             border-radius: 10px;
@@ -221,7 +217,7 @@ def apply_app_theme():
 
         /* =========================================================
            INPUTS
-           ========================================================= */
+        ========================================================= */
 
         .stTextInput label,
         .stTextArea label,
@@ -239,7 +235,7 @@ def apply_app_theme():
 
         /* =========================================================
            DATAFRAME
-           ========================================================= */
+        ========================================================= */
 
         [data-testid="stDataFrame"] {
             border-radius: 14px;
@@ -250,8 +246,8 @@ def apply_app_theme():
         }
 
         /* =========================================================
-           INFO / SUCCESS / WARNING
-           ========================================================= */
+           ALERTS
+        ========================================================= */
 
         [data-testid="stAlert"] {
             border-radius: 12px;
@@ -259,7 +255,7 @@ def apply_app_theme():
 
         /* =========================================================
            DIVIDERS
-           ========================================================= */
+        ========================================================= */
 
         hr {
             border: none;
@@ -269,7 +265,7 @@ def apply_app_theme():
 
         /* =========================================================
            MOBILE
-           ========================================================= */
+        ========================================================= */
 
         @media (max-width: 768px) {
 
@@ -313,7 +309,7 @@ def apply_app_theme():
 
 def render_ai_hero():
     """Render the main AI application header."""
-```python
+
     st.markdown(
         """
         <div class="ai-hero">
@@ -349,88 +345,5 @@ def render_status_cards():
                 <div class="status-title">
                     AI Engine
                 </div>
-                <div class="status-value">
-                    ✦ Gemini
-                </div>
-            </div>
-
-            <div class="status-card">
-                <div class="status-title">
-                    Database
-                </div>
-                <div class="status-value">
-                    ● Supabase PostgreSQL
-                </div>
-            </div>
-
-            <div class="status-card">
-                <div class="status-title">
-                    Security
-                </div>
-                <div class="status-value">
-                    🔒 RLS Protected
-                </div>
-            </div>
-
-            <div class="status-card">
-                <div class="status-title">
-                    Processing
-                </div>
-                <div class="status-value">
-                    📄 PDF Intelligence
-                </div>
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_workflow():
-    """Render the document processing workflow."""
-
-    st.markdown(
-        """
-        <div class="workflow">
-
-            <div class="workflow-step">
-                ① Upload
-            </div>
-
-            <div class="workflow-arrow">
-                →
-            </div>
-
-            <div class="workflow-step">
-                ② AI Extract
-            </div>
-
-            <div class="workflow-arrow">
-                →
-            </div>
-
-            <div class="workflow-step">
-                ③ Review
-            </div>
-
-            <div class="workflow-arrow">
-                →
-            </div>
-
-            <div class="workflow-step">
-                ④ Correct
-            </div>
-
-            <div class="workflow-arrow">
-                →
-            </div>
-
-            <div class="workflow-step">
-                ⑤ Save
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+                <div
+```
