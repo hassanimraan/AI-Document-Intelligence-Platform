@@ -1,11 +1,11 @@
+import streamlit as st
+
 from ui.theme import (
     apply_app_theme,
     render_ai_hero,
     render_status_cards,
     render_workflow,
 )
-
-import streamlit as st
 
 from ui.auth_ui import (
     get_supabase_client,
