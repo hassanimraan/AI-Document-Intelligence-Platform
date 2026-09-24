@@ -45,6 +45,7 @@ supabase = get_supabase_client()
 # ============================================================
 
 def initialize_auth_state():
+
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
 
@@ -59,17 +60,29 @@ def initialize_auth_state():
 
 
 def restore_session():
+
     try:
+
         session = supabase.auth.get_session()
 
         if session is not None:
+
             if session.access_token and session.refresh_token:
-                st.session_state.access_token = session.access_token
-                st.session_state.refresh_token = session.refresh_token
+
+                st.session_state.access_token = (
+                    session.access_token
+                )
+
+                st.session_state.refresh_token = (
+                    session.refresh_token
+                )
+
                 st.session_state.authenticated = True
 
                 if session.user:
-                    st.session_state.user_email = session.user.email
+                    st.session_state.user_email = (
+                        session.user.email
+                    )
 
                 return True
 
@@ -80,6 +93,7 @@ def restore_session():
 
 
 def login_user(email, password):
+
     response = supabase.auth.sign_in_with_password(
         {
             "email": email,
@@ -93,13 +107,20 @@ def login_user(email, password):
     if session is None or user is None:
         raise ValueError("Login failed.")
 
-    st.session_state.access_token = session.access_token
-    st.session_state.refresh_token = session.refresh_token
+    st.session_state.access_token = (
+        session.access_token
+    )
+
+    st.session_state.refresh_token = (
+        session.refresh_token
+    )
+
     st.session_state.authenticated = True
     st.session_state.user_email = user.email
 
 
 def signup_user(email, password):
+
     response = supabase.auth.sign_up(
         {
             "email": email,
@@ -108,18 +129,30 @@ def signup_user(email, password):
     )
 
     if response.user is None:
-        raise ValueError("Account creation failed.")
+        raise ValueError(
+            "Account creation failed."
+        )
 
     if response.session is not None:
-        st.session_state.access_token = response.session.access_token
-        st.session_state.refresh_token = response.session.refresh_token
+
+        st.session_state.access_token = (
+            response.session.access_token
+        )
+
+        st.session_state.refresh_token = (
+            response.session.refresh_token
+        )
+
         st.session_state.authenticated = True
-        st.session_state.user_email = response.user.email
+        st.session_state.user_email = (
+            response.user.email
+        )
 
     return response
 
 
 def logout_user():
+
     try:
         supabase.auth.sign_out()
     except Exception:
@@ -130,19 +163,41 @@ def logout_user():
     st.session_state.refresh_token = None
     st.session_state.user_email = None
 
-    # Clear temporary workflow state.
-    keys_to_clear = [
-        "uploaded_file_name",
+    workflow_keys = [
+        "selected_pdf_index",
+        "processed_pdf_name",
         "extracted_text",
         "extracted_data",
         "edited_data",
         "corrected_data",
         "final_data",
-        "confirmation",
         "verified_data",
+        "final_confirmation",
     ]
 
-    for key in keys_to_clear:
+    for key in workflow_keys:
+        st.session_state.pop(key, None)
+
+
+# ============================================================
+# WORKFLOW RESET
+# ============================================================
+
+def reset_current_document_workflow():
+
+    workflow_keys = [
+        "processed_pdf_name",
+        "extracted_text",
+        "extracted_data",
+        "edited_data",
+        "corrected_data",
+        "final_data",
+        "verified_data",
+        "final_confirmation",
+        "correction_instruction",
+    ]
+
+    for key in workflow_keys:
         st.session_state.pop(key, None)
 
 
@@ -197,9 +252,16 @@ if not st.session_state.authenticated:
             key="login_button",
         ):
 
-            if not login_email or not login_password:
+            if not login_email:
+
                 st.error(
-                    "Please enter your email and password."
+                    "Please enter an email address."
+                )
+
+            elif not login_password:
+
+                st.error(
+                    "Please enter a password."
                 )
 
             else:
@@ -211,7 +273,9 @@ if not st.session_state.authenticated:
                         login_password,
                     )
 
-                    st.success("Login successful.")
+                    st.success(
+                        "Login successful."
+                    )
 
                     st.rerun()
 
@@ -222,10 +286,6 @@ if not st.session_state.authenticated:
                     )
 
     # --------------------------------------------------------
-    # SIGNUP
-    # --------------------------------------------------------
-
-        # --------------------------------------------------------
     # SIGNUP
     # --------------------------------------------------------
 
@@ -258,16 +318,20 @@ if not st.session_state.authenticated:
                 autocomplete="new-password",
             )
 
-            create_account_submitted = st.form_submit_button(
-                "Create Account",
-                type="primary",
+            create_account_submitted = (
+                st.form_submit_button(
+                    "Create Account",
+                    type="primary",
+                )
             )
 
         if create_account_submitted:
 
             email = signup_email.strip()
             password = signup_password
-            password_confirm = signup_password_confirm
+            password_confirm = (
+                signup_password_confirm
+            )
 
             if not email:
 
@@ -318,6 +382,9 @@ if not st.session_state.authenticated:
                         f"Account creation failed: {exc}"
                     )
 
+    st.stop()
+
+
 # ============================================================
 # AUTHENTICATED APPLICATION
 # ============================================================
@@ -325,12 +392,13 @@ if not st.session_state.authenticated:
 st.title("📄 Credential Extraction Chatbot")
 
 st.caption(
-    "Phase 8 — Persistent Supabase Database"
+    "Phase 10 — Controlled Multiple-PDF Processing"
 )
 
-# ------------------------------------------------------------
+
+# ============================================================
 # USER INFORMATION
-# ------------------------------------------------------------
+# ============================================================
 
 user_col1, user_col2 = st.columns(
     [5, 1]
@@ -339,7 +407,8 @@ user_col1, user_col2 = st.columns(
 with user_col1:
 
     st.success(
-        f"Logged in as: {st.session_state.user_email}"
+        f"Logged in as: "
+        f"{st.session_state.user_email}"
     )
 
 with user_col2:
@@ -354,100 +423,125 @@ with user_col2:
 
 
 # ============================================================
-# PDF PROCESSING WORKFLOW
+# PDF SELECTION
 # ============================================================
 
-st.header("📥 Process Credential Document")
+st.header("📥 Select Credential Documents")
 
-uploaded_file = st.file_uploader(
-    "Upload a PDF document",
+st.write(
+    "You may select multiple PDFs. "
+    "Only the PDF you explicitly choose to process "
+    "will be sent for extraction."
+)
+
+uploaded_files = st.file_uploader(
+    "Select PDF documents",
     type=["pdf"],
+    accept_multiple_files=True,
     key="credential_pdf_uploader",
 )
 
 
-# ------------------------------------------------------------
-# NEW PDF DETECTION
-# ------------------------------------------------------------
+# ============================================================
+# MULTI-PDF SELECTION HANDLING
+# ============================================================
 
-if uploaded_file is not None:
+if uploaded_files:
 
-    current_file_name = uploaded_file.name
+    file_names = [
+        uploaded_file.name
+        for uploaded_file in uploaded_files
+    ]
 
-    previous_file_name = st.session_state.get(
-        "uploaded_file_name"
+    st.session_state.selected_file_names = (
+        file_names
     )
 
-    if current_file_name != previous_file_name:
+    st.subheader(
+        "📋 Selected Documents"
+    )
 
-        st.session_state.uploaded_file_name = (
-            current_file_name
+    for index, file_name in enumerate(
+        file_names,
+        start=1,
+    ):
+
+        st.write(
+            f"{index}. {file_name}"
         )
 
-        st.session_state.pop(
-            "extracted_text",
-            None
+    selected_index = st.selectbox(
+        "Select the PDF to process",
+        options=range(len(uploaded_files)),
+        format_func=lambda index: (
+            f"{index + 1}. "
+            f"{uploaded_files[index].name}"
+        ),
+        key="selected_pdf_index",
+    )
+
+    selected_file = uploaded_files[
+        selected_index
+    ]
+
+    selected_file_name = selected_file.name
+
+    previous_processed_file = (
+        st.session_state.get(
+            "processed_pdf_name"
         )
+    )
 
-        st.session_state.pop(
-            "extracted_data",
-            None
-        )
+    # --------------------------------------------------------
+    # If user selects a different PDF, clear only the
+    # temporary workflow belonging to the previous PDF.
+    # --------------------------------------------------------
 
-        st.session_state.pop(
-            "edited_data",
-            None
-        )
+    if (
+        previous_processed_file
+        and previous_processed_file != selected_file_name
+    ):
 
-        st.session_state.pop(
-            "corrected_data",
-            None
-        )
+        reset_current_document_workflow()
 
-        st.session_state.pop(
-            "final_data",
-            None
-        )
+    st.info(
+        f"Current PDF: **{selected_file_name}**"
+    )
 
-        st.session_state.pop(
-            "confirmation",
-            None
-        )
-
-        st.session_state.pop(
-            "verified_data",
-            None
-        )
-
-
-# ------------------------------------------------------------
-# PROCESS PDF
-# ------------------------------------------------------------
-
-if uploaded_file is not None:
+    # --------------------------------------------------------
+    # PROCESS CURRENT PDF
+    # --------------------------------------------------------
 
     if st.button(
-        "🔍 Process PDF",
+        "🔍 Process Current PDF",
         type="primary",
-        key="process_pdf_button",
+        key="process_current_pdf_button",
     ):
 
         try:
 
-            validate_pdf(uploaded_file)
+            validate_pdf(selected_file)
+
+            # Store which document is actually being processed.
+            st.session_state.processed_pdf_name = (
+                selected_file_name
+            )
 
             with st.spinner(
                 "Extracting text from PDF..."
             ):
 
-                extracted_text = extract_text_from_pdf(
-                    uploaded_file
+                extracted_text = (
+                    extract_text_from_pdf(
+                        selected_file
+                    )
                 )
 
             if not extracted_text:
 
                 raise ValueError(
-                    "No text could be extracted from the PDF."
+                    "No text could be extracted "
+                    "from the PDF."
                 )
 
             st.session_state.extracted_text = (
@@ -466,7 +560,7 @@ if uploaded_file is not None:
 
             if isinstance(
                 structured_data,
-                str
+                str,
             ):
 
                 structured_data = json.loads(
@@ -483,22 +577,22 @@ if uploaded_file is not None:
 
             st.session_state.pop(
                 "corrected_data",
-                None
+                None,
             )
 
             st.session_state.pop(
                 "final_data",
-                None
-            )
-
-            st.session_state.pop(
-                "confirmation",
-                None
+                None,
             )
 
             st.session_state.pop(
                 "verified_data",
-                None
+                None,
+            )
+
+            st.session_state.pop(
+                "final_confirmation",
+                None,
             )
 
             st.success(
@@ -538,7 +632,9 @@ if st.session_state.get(
     "extracted_data"
 ):
 
-    st.header("✏️ Review Extracted Data")
+    st.header(
+        "✏️ Review Extracted Data"
+    )
 
     source_data = st.session_state.get(
         "edited_data",
@@ -573,17 +669,17 @@ if st.session_state.get(
 
         st.session_state.pop(
             "corrected_data",
-            None
+            None,
         )
 
         st.session_state.pop(
             "final_data",
-            None
+            None,
         )
 
         st.session_state.pop(
-            "confirmation",
-            None
+            "final_confirmation",
+            None,
         )
 
         st.success(
@@ -640,7 +736,7 @@ if st.session_state.get(
 
                 if isinstance(
                     corrected_data,
-                    str
+                    str,
                 ):
 
                     corrected_data = json.loads(
@@ -653,12 +749,12 @@ if st.session_state.get(
 
                 st.session_state.pop(
                     "final_data",
-                    None
+                    None,
                 )
 
                 st.session_state.pop(
-                    "confirmation",
-                    None
+                    "final_confirmation",
+                    None,
                 )
 
                 st.success(
@@ -695,7 +791,8 @@ if st.session_state.get(
         )
 
         st.write(
-            f"**{field}:** {value if value is not None else ''}"
+            f"**{field}:** "
+            f"{value if value is not None else ''}"
         )
 
     if st.button(
@@ -708,7 +805,8 @@ if st.session_state.get(
         )
 
         st.success(
-            "Corrected data selected for final verification."
+            "Corrected data selected "
+            "for final verification."
         )
 
 
@@ -724,7 +822,9 @@ if st.session_state.get(
         "✅ Final Verification"
     )
 
-    final_data = st.session_state.final_data
+    final_data = (
+        st.session_state.final_data
+    )
 
     st.json(final_data)
 
@@ -750,8 +850,10 @@ if st.session_state.get(
 
             try:
 
-                normalized_record = normalize_record(
-                    final_data
+                normalized_record = (
+                    normalize_record(
+                        final_data
+                    )
                 )
 
                 db = DatabaseManager()
@@ -761,11 +863,15 @@ if st.session_state.get(
                     st.session_state.refresh_token,
                 )
 
-                saved_record = db.insert_credential(
-                    normalized_record,
-                    document_filename=st.session_state.get(
-                        "uploaded_file_name"
-                    ),
+                saved_record = (
+                    db.insert_credential(
+                        normalized_record,
+                        document_filename=(
+                            st.session_state.get(
+                                "processed_pdf_name"
+                            )
+                        ),
+                    )
                 )
 
                 st.session_state.verified_data = (
@@ -773,8 +879,8 @@ if st.session_state.get(
                 )
 
                 st.success(
-                    "✓ Record verified and saved successfully "
-                    "to the Supabase database."
+                    "✓ Record verified and saved "
+                    "successfully to the Supabase database."
                 )
 
                 st.write(
@@ -783,6 +889,12 @@ if st.session_state.get(
 
                 st.code(
                     saved_record["id"]
+                )
+
+                st.info(
+                    "The record has been saved. "
+                    "You can now select another PDF "
+                    "from the list above."
                 )
 
             except Exception as exc:
@@ -798,11 +910,13 @@ if st.session_state.get(
 
 st.divider()
 
-st.header("📚 My Credential Records")
+st.header(
+    "📚 My Credential Records"
+)
 
 st.write(
-    "Records stored in Supabase for the currently "
-    "authenticated user."
+    "Records stored in Supabase for the "
+    "currently authenticated user."
 )
 
 if st.button(
@@ -819,7 +933,9 @@ if st.button(
             st.session_state.refresh_token,
         )
 
-        records = db.get_user_credentials()
+        records = (
+            db.get_user_credentials()
+        )
 
         if not records:
 
@@ -879,7 +995,6 @@ if st.button(
                     }
                 )
 
-            # Generate display-only serial numbers.
             for index, row in enumerate(
                 display_rows,
                 start=1,
