@@ -3,23 +3,18 @@ import streamlit as st
 def _get_active_workspace_id():
 """Return the currently selected workspace ID."""
 
-```
-workspace_id = st.session_state.get(
-    "active_workspace_id"
-)
+workspace_id = st.session_state.get("active_workspace_id")
 
 if not workspace_id:
-    raise ValueError(
-        "Please select a workspace first."
-    )
+    raise ValueError("Please select a workspace first.")
 
 return workspace_id
-```
+
 
 def load_schemas(supabase):
 """Load active registers belonging to the active workspace."""
 
-```
+
 workspace_id = _get_active_workspace_id()
 
 response = (
@@ -33,23 +28,17 @@ response = (
 )
 
 return response.data or []
-```
 
-def create_schema(
-supabase,
-name,
-description,
-):
+
+def create_schema(supabase, name, description):
 """Create a new document register/schema."""
 
-```
+
 name = name.strip()
 description = description.strip()
 
 if not name:
-    raise ValueError(
-        "Register name is required."
-    )
+    raise ValueError("Register name is required.")
 
 workspace_id = _get_active_workspace_id()
 
@@ -69,20 +58,15 @@ response = (
 )
 
 if not response.data:
-    raise ValueError(
-        "Register could not be created."
-    )
+    raise ValueError("Register could not be created.")
 
 return response.data[0]
-```
 
-def get_record_count(
-supabase,
-schema_id,
-):
+
+def get_record_count(supabase, schema_id):
 """Return the number of records belonging to a register."""
 
-```
+
 response = (
     supabase
     .table("document_records")
@@ -92,28 +76,15 @@ response = (
 )
 
 return len(response.data or [])
-```
 
-def delete_schema(
-supabase,
-schema_id,
-):
-"""
-Permanently delete a register and its associated data.
 
-```
-Deletion order:
-1. document_records
-2. schema_fields
-3. document_schemas
-"""
+def delete_schema(supabase, schema_id):
+"""Delete a register and all associated records and fields."""
+
 
 workspace_id = _get_active_workspace_id()
 
-# --------------------------------------------------------
-# Verify that the register belongs to the active workspace
-# --------------------------------------------------------
-
+# Verify that the register belongs to the active workspace.
 schema_response = (
     supabase
     .table("document_schemas")
@@ -129,10 +100,7 @@ if not schema_response.data:
         "Register could not be found in the active workspace."
     )
 
-# --------------------------------------------------------
-# Delete associated document records
-# --------------------------------------------------------
-
+# Delete document records first.
 (
     supabase
     .table("document_records")
@@ -142,10 +110,7 @@ if not schema_response.data:
     .execute()
 )
 
-# --------------------------------------------------------
-# Delete associated schema fields
-# --------------------------------------------------------
-
+# Delete register fields.
 (
     supabase
     .table("schema_fields")
@@ -154,10 +119,7 @@ if not schema_response.data:
     .execute()
 )
 
-# --------------------------------------------------------
-# Delete the register itself
-# --------------------------------------------------------
-
+# Delete the register.
 delete_response = (
     supabase
     .table("document_schemas")
@@ -168,40 +130,17 @@ delete_response = (
 )
 
 if not delete_response.data:
-    raise ValueError(
-        "Register could not be deleted."
-    )
+    raise ValueError("Register could not be deleted.")
 
-# --------------------------------------------------------
-# Clear active register if it was deleted
-# --------------------------------------------------------
-
-if (
-    st.session_state.get("active_schema_id")
-    == schema_id
-):
-
-    st.session_state.pop(
-        "active_schema_id",
-        None,
-    )
-
-    st.session_state.pop(
-        "active_schema_name",
-        None,
-    )
-
-    # Clear the register structure editor state too.
-    st.session_state.pop(
-        "structure_headers",
-        None,
-    )
-```
+# Clear active register if it was deleted.
+if st.session_state.get("active_schema_id") == schema_id:
+    st.session_state.pop("active_schema_id", None)
+    st.session_state.pop("active_schema_name", None)
+    st.session_state.pop("structure_headers", None)
 
 def render_schema_ui(supabase):
 """Render register/schema management."""
 
-```
 active_workspace_id = st.session_state.get(
     "active_workspace_id"
 )
@@ -216,9 +155,7 @@ if not active_workspace_id:
     )
     return
 
-st.header(
-    "📋 Registers"
-)
+st.header("📋 Registers")
 
 st.caption(
     f"Workspace: {active_workspace_name}"
@@ -240,9 +177,7 @@ with st.expander(
 
         schema_name = st.text_input(
             "Register Name",
-            placeholder=(
-                "e.g. Credential Register"
-            ),
+            placeholder="e.g. Credential Register",
         )
 
         schema_description = st.text_area(
@@ -290,9 +225,7 @@ st.subheader(
 
 try:
 
-    schemas = load_schemas(
-        supabase
-    )
+    schemas = load_schemas(supabase)
 
 except Exception as exc:
 
@@ -310,32 +243,20 @@ if not schemas:
 
     return
 
-# ========================================================
-# REGISTER LIST
-# ========================================================
-
 for schema in schemas:
 
-    schema_id = schema.get(
-        "id"
-    )
+    schema_id = schema.get("id")
 
     schema_name = schema.get(
         "name",
         "Unnamed Register",
     )
 
-    schema_description = schema.get(
-        "description"
-    )
+    schema_description = schema.get("description")
 
-    with st.container(
-        border=True
-    ):
+    with st.container(border=True):
 
-        col1, col2, col3 = st.columns(
-            [4, 1, 1]
-        )
+        col1, col2, col3 = st.columns([4, 1, 1])
 
         with col1:
 
@@ -369,9 +290,6 @@ for schema in schemas:
                     "active_schema_name"
                 ] = schema_name
 
-                # Clear old structure editor state
-                # so the newly opened register loads
-                # its own headers.
                 st.session_state.pop(
                     "structure_headers",
                     None,
@@ -450,9 +368,7 @@ if pending_delete_schema_id:
         "**This action cannot be undone.**"
     )
 
-    confirm_col1, confirm_col2 = st.columns(
-        2
-    )
+    confirm_col1, confirm_col2 = st.columns(2)
 
     with confirm_col1:
 
@@ -476,15 +392,11 @@ if pending_delete_schema_id:
 
     with confirm_col2:
 
-        confirm_text = (
-            "Delete Register Permanently"
-        )
+        confirm_text = "Delete Register Permanently"
 
         if record_count and record_count > 0:
 
-            confirm_text = (
-                "Delete Register + Records"
-            )
+            confirm_text = "Delete Register + Records"
 
         if st.button(
             confirm_text,
@@ -549,4 +461,3 @@ if active_schema_id:
     st.caption(
         f"Register ID: {active_schema_id}"
     )
-```
