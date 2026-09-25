@@ -1,0 +1,269 @@
+import streamlit as st
+
+
+def _get_active_workspace_id():
+    """Return the currently selected workspace ID."""
+
+    workspace_id = st.session_state.get(
+        "active_workspace_id"
+    )
+
+    if not workspace_id:
+        raise ValueError(
+            "Please select a workspace first."
+        )
+
+    return workspace_id
+
+
+def load_schemas(supabase):
+    """Load active registers belonging to the active workspace."""
+
+    workspace_id = _get_active_workspace_id()
+
+    response = (
+        supabase
+        .table("document_schemas")
+        .select("*")
+        .eq("workspace_id", workspace_id)
+        .eq("is_active", True)
+        .order("created_at")
+        .execute()
+    )
+
+    return response.data or []
+
+
+def create_schema(
+    supabase,
+    name,
+    description,
+):
+    """Create a new document register/schema."""
+
+    name = name.strip()
+    description = description.strip()
+
+    if not name:
+        raise ValueError(
+            "Register name is required."
+        )
+
+    workspace_id = _get_active_workspace_id()
+
+    response = (
+        supabase
+        .table("document_schemas")
+        .insert(
+            {
+                "workspace_id": workspace_id,
+                "name": name,
+                "description": description or None,
+                "version": 1,
+                "is_active": True,
+            }
+        )
+        .execute()
+    )
+
+    if not response.data:
+        raise ValueError(
+            "Register could not be created."
+        )
+
+    return response.data[0]
+
+
+def render_schema_ui(supabase):
+    """Render register/schema management."""
+
+    active_workspace_id = st.session_state.get(
+        "active_workspace_id"
+    )
+
+    active_workspace_name = st.session_state.get(
+        "active_workspace_name"
+    )
+
+    if not active_workspace_id:
+        st.info(
+            "Please open a workspace before managing registers."
+        )
+        return
+
+    st.header(
+        "📋 Registers"
+    )
+
+    st.caption(
+        f"Workspace: {active_workspace_name}"
+    )
+
+    # ========================================================
+    # CREATE REGISTER
+    # ========================================================
+
+    with st.expander(
+        "➕ Create New Register",
+        expanded=True,
+    ):
+
+        with st.form(
+            "create_schema_form",
+            clear_on_submit=True,
+        ):
+
+            schema_name = st.text_input(
+                "Register Name",
+                placeholder=(
+                    "e.g. Credential Register"
+                ),
+            )
+
+            schema_description = st.text_area(
+                "Description",
+                placeholder=(
+                    "Describe the type of records "
+                    "this register will contain."
+                ),
+            )
+
+            submitted = st.form_submit_button(
+                "Create Register",
+                type="primary",
+            )
+
+            if submitted:
+
+                try:
+
+                    create_schema(
+                        supabase,
+                        schema_name,
+                        schema_description,
+                    )
+
+                    st.success(
+                        "Register created successfully."
+                    )
+
+                    st.rerun()
+
+                except Exception as exc:
+
+                    st.error(
+                        f"Register could not be created: {exc}"
+                    )
+
+    # ========================================================
+    # EXISTING REGISTERS
+    # ========================================================
+
+    st.subheader(
+        "Registers in This Workspace"
+    )
+
+    try:
+
+        schemas = load_schemas(
+            supabase
+        )
+
+    except Exception as exc:
+
+        st.error(
+            f"Registers could not be loaded: {exc}"
+        )
+
+        return
+
+    if not schemas:
+
+        st.info(
+            "No registers have been created in this workspace yet."
+        )
+
+        return
+
+    for schema in schemas:
+
+        schema_id = schema.get(
+            "id"
+        )
+
+        schema_name = schema.get(
+            "name",
+            "Unnamed Register",
+        )
+
+        schema_description = schema.get(
+            "description"
+        )
+
+        with st.container(
+            border=True
+        ):
+
+            col1, col2 = st.columns(
+                [4, 1]
+            )
+
+            with col1:
+
+                st.markdown(
+                    f"### {schema_name}"
+                )
+
+                if schema_description:
+
+                    st.caption(
+                        schema_description
+                    )
+
+                st.caption(
+                    f"Register ID: {schema_id}"
+                )
+
+            with col2:
+
+                if st.button(
+                    "Open",
+                    key=f"open_schema_{schema_id}",
+                    use_container_width=True,
+                ):
+
+                    st.session_state[
+                        "active_schema_id"
+                    ] = schema_id
+
+                    st.session_state[
+                        "active_schema_name"
+                    ] = schema_name
+
+    # ========================================================
+    # ACTIVE REGISTER
+    # ========================================================
+
+    active_schema_id = st.session_state.get(
+        "active_schema_id"
+    )
+
+    active_schema_name = st.session_state.get(
+        "active_schema_name"
+    )
+
+    if active_schema_id:
+
+        st.divider()
+
+        st.subheader(
+            "Active Register"
+        )
+
+        st.success(
+            f"Currently selected: {active_schema_name}"
+        )
+
+        st.caption(
+            f"Register ID: {active_schema_id}"
+        )
