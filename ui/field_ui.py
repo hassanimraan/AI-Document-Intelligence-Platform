@@ -1,9 +1,8 @@
 import streamlit as st
-import pandas as pd
 
 
 def _get_active_schema_id():
-    """Return the currently selected register/schema ID."""
+    """Return the currently selected register ID."""
 
     schema_id = st.session_state.get("active_schema_id")
 
@@ -16,7 +15,7 @@ def _get_active_schema_id():
 
 
 def load_fields(supabase):
-    """Load headers belonging to the active register."""
+    """Load headers for the active register."""
 
     schema_id = _get_active_schema_id()
 
@@ -34,15 +33,15 @@ def load_fields(supabase):
 
 
 def initialize_structure(supabase):
-    """Load the saved register structure into temporary UI state."""
+    """Load the saved structure into temporary editor state."""
 
     schema_id = _get_active_schema_id()
 
-    state_schema_id = st.session_state.get(
+    current_schema_id = st.session_state.get(
         "structure_editor_schema_id"
     )
 
-    if state_schema_id == schema_id:
+    if current_schema_id == schema_id:
         return
 
     fields = load_fields(supabase)
@@ -59,7 +58,7 @@ def initialize_structure(supabase):
 
 
 def add_header():
-    """Add a new blank header to the temporary structure."""
+    """Add one blank header."""
 
     st.session_state.structure_headers.append(
         {
@@ -70,44 +69,16 @@ def add_header():
 
 
 def delete_header(index):
-    """Delete a header from the temporary structure."""
-
-    if 0 <= index < len(
-        st.session_state.structure_headers
-    ):
-        st.session_state.structure_headers.pop(index)
-
-
-def move_header_up(index):
-    """Move a header one position upward."""
-
-    if index <= 0:
-        return
+    """Delete a header from the editor."""
 
     headers = st.session_state.structure_headers
 
-    headers[index - 1], headers[index] = (
-        headers[index],
-        headers[index - 1],
-    )
-
-
-def move_header_down(index):
-    """Move a header one position downward."""
-
-    headers = st.session_state.structure_headers
-
-    if index >= len(headers) - 1:
-        return
-
-    headers[index], headers[index + 1] = (
-        headers[index + 1],
-        headers[index],
-    )
+    if 0 <= index < len(headers):
+        headers.pop(index)
 
 
 def save_structure(supabase):
-    """Save the current header structure to Supabase."""
+    """Save the current register structure."""
 
     schema_id = _get_active_schema_id()
 
@@ -125,15 +96,13 @@ def save_structure(supabase):
             "",
         ).strip()
 
-        if not name:
-            continue
-
-        cleaned_headers.append(
-            {
-                "id": header.get("id"),
-                "name": name,
-            }
-        )
+        if name:
+            cleaned_headers.append(
+                {
+                    "id": header.get("id"),
+                    "name": name,
+                }
+            )
 
     if not cleaned_headers:
 
@@ -142,16 +111,16 @@ def save_structure(supabase):
         )
 
     # --------------------------------------------------------
-    # Check duplicate headers
+    # Prevent duplicate header names
     # --------------------------------------------------------
 
-    names_lower = [
-        header["name"].lower()
+    normalized_names = [
+        header["name"].strip().lower()
         for header in cleaned_headers
     ]
 
-    if len(names_lower) != len(
-        set(names_lower)
+    if len(normalized_names) != len(
+        set(normalized_names)
     ):
 
         raise ValueError(
@@ -159,7 +128,7 @@ def save_structure(supabase):
         )
 
     # --------------------------------------------------------
-    # Load existing database fields
+    # Existing database headers
     # --------------------------------------------------------
 
     existing_fields = load_fields(
@@ -182,11 +151,9 @@ def save_structure(supabase):
     # Delete removed headers
     # --------------------------------------------------------
 
-    ids_to_delete = (
+    for field_id in (
         existing_ids - current_ids
-    )
-
-    for field_id in ids_to_delete:
+    ):
 
         (
             supabase
@@ -254,7 +221,7 @@ def save_structure(supabase):
             header["id"] = response.data[0]["id"]
 
     # --------------------------------------------------------
-    # Replace temporary state with clean saved structure
+    # Update temporary state
     # --------------------------------------------------------
 
     st.session_state.structure_headers = [
@@ -265,11 +232,9 @@ def save_structure(supabase):
         for header in cleaned_headers
     ]
 
-    st.session_state.structure_saved = True
-
 
 def render_field_ui(supabase):
-    """Render the simplified Excel-like register structure editor."""
+    """Render the simplified register structure editor."""
 
     active_schema_id = st.session_state.get(
         "active_schema_id"
@@ -303,174 +268,92 @@ def render_field_ui(supabase):
         "Define the column headers for this register."
     )
 
-    st.info(
-        "You can add as many headers as needed. "
-        "The headers can be changed later."
-    )
+    # ========================================================
+    # HEADER EDITOR
+    # ========================================================
+
+    headers = st.session_state.structure_headers
+
+    if headers:
+
+        for index, header in enumerate(
+            headers
+        ):
+
+            col1, col2, col3 = st.columns(
+                [0.5, 6, 0.8]
+            )
+
+            with col1:
+
+                st.markdown(
+                    f"**{index + 1}**"
+                )
+
+            with col2:
+
+                new_name = st.text_input(
+                    "Header name",
+                    value=header.get(
+                        "name",
+                        "",
+                    ),
+                    key=(
+                        f"header_name_"
+                        f"{active_schema_id}_"
+                        f"{index}"
+                    ),
+                    label_visibility="collapsed",
+                    placeholder="Enter header name",
+                )
+
+                st.session_state.structure_headers[
+                    index
+                ]["name"] = new_name
+
+            with col3:
+
+                if st.button(
+                    "🗑️",
+                    key=(
+                        f"delete_header_"
+                        f"{active_schema_id}_"
+                        f"{index}"
+                    ),
+                    help="Delete this header",
+                ):
+
+                    delete_header(
+                        index
+                    )
+
+                    st.rerun()
+
+    else:
+
+        st.info(
+            "No headers have been added yet."
+        )
 
     # ========================================================
     # ADD HEADER
     # ========================================================
 
+    st.divider()
+
     if st.button(
         "➕ Add Header",
-        type="primary",
-        key="add_structure_header",
+        use_container_width=True,
+        key=f"add_header_{active_schema_id}",
     ):
 
         add_header()
 
-        st.session_state.structure_saved = False
-
         st.rerun()
-
-    # ========================================================
-    # EMPTY STATE
-    # ========================================================
-
-    headers = st.session_state.structure_headers
-
-    if not headers:
-
-        st.info(
-            "No headers yet. Click 'Add Header' to create your first column."
-        )
-
-        return
-
-    # ========================================================
-    # EXCEL-LIKE PREVIEW
-    # ========================================================
-
-    st.subheader(
-        "Column Headers"
-    )
-
-    preview_names = [
-        header.get("name", "").strip()
-        or f"Header {index}"
-        for index, header in enumerate(
-            headers,
-            start=1,
-        )
-    ]
-
-    preview_data = {
-        name: [name]
-        for name in preview_names
-    }
-
-    preview_df = pd.DataFrame(
-        preview_data,
-        index=["Header"],
-    )
-
-    st.dataframe(
-        preview_df,
-        use_container_width=True,
-        hide_index=False,
-    )
-
-    # ========================================================
-    # HEADER EDITOR
-    # ========================================================
-
-    st.subheader(
-        "Edit Headers"
-    )
-
-    st.caption(
-        "Change the names below or use the arrow buttons to change their order."
-    )
-
-    for index, header in enumerate(
-        headers
-    ):
-
-        current_name = header.get(
-            "name",
-            "",
-        )
-
-        col1, col2, col3, col4, col5 = st.columns(
-            [0.5, 5, 0.8, 0.8, 1]
-        )
-
-        with col1:
-
-            st.markdown(
-                f"**{index + 1}**"
-            )
-
-        with col2:
-
-            new_name = st.text_input(
-                "Header",
-                value=current_name,
-                key=f"header_name_{active_schema_id}_{index}",
-                label_visibility="collapsed",
-                placeholder="Enter column header",
-            )
-
-            st.session_state.structure_headers[
-                index
-            ]["name"] = new_name
-
-        with col3:
-
-            if st.button(
-                "⬆️",
-                key=f"header_up_{active_schema_id}_{index}",
-                disabled=(index == 0),
-                help="Move header up",
-            ):
-
-                move_header_up(
-                    index
-                )
-
-                st.session_state.structure_saved = False
-
-                st.rerun()
-
-        with col4:
-
-            if st.button(
-                "⬇️",
-                key=f"header_down_{active_schema_id}_{index}",
-                disabled=(index == len(headers) - 1),
-                help="Move header down",
-            ):
-
-                move_header_down(
-                    index
-                )
-
-                st.session_state.structure_saved = False
-
-                st.rerun()
-
-        with col5:
-
-            if st.button(
-                "🗑️",
-                key=f"header_delete_{active_schema_id}_{index}",
-                help="Delete header",
-            ):
-
-                delete_header(
-                    index
-                )
-
-                st.session_state.structure_saved = False
-
-                st.rerun()
 
     # ========================================================
     # SAVE STRUCTURE
     # ========================================================
-
-    st.divider()
 
     if st.button(
         "💾 Save Register Structure",
@@ -496,57 +379,3 @@ def render_field_ui(supabase):
             st.error(
                 f"Register structure could not be saved: {exc}"
             )
-
-    # ========================================================
-    # SAVED STRUCTURE
-    # ========================================================
-
-    st.divider()
-
-    st.subheader(
-        "Current Saved Structure"
-    )
-
-    try:
-
-        saved_fields = load_fields(
-            supabase
-        )
-
-        if saved_fields:
-
-            saved_names = [
-                field.get(
-                    "field_name",
-                    "",
-                )
-                for field in saved_fields
-            ]
-
-            saved_df = pd.DataFrame(
-                {
-                    "Column": range(
-                        1,
-                        len(saved_names) + 1,
-                    ),
-                    "Header": saved_names,
-                }
-            )
-
-            st.dataframe(
-                saved_df,
-                use_container_width=True,
-                hide_index=True,
-            )
-
-        else:
-
-            st.info(
-                "The register structure has not been saved yet."
-            )
-
-    except Exception as exc:
-
-        st.error(
-            f"Saved structure could not be loaded: {exc}"
-        )
