@@ -105,12 +105,39 @@ def create_register(supabase, workspace_id, name, description):
 def render_dashboard(supabase):
     """Render the main application dashboard."""
 
+    # ========================================================
+    # COMPACT CENTERED HEADER
+    # ========================================================
+
     st.markdown(
         """
-        <div class="adi-header">
-            <div class="adi-kicker">✦ AI DOCUMENT INTELLIGENCE</div>
-            <div class="adi-title">Credential Intelligence</div>
-            <div class="adi-subtitle">
+        <div style="
+            text-align: center;
+            padding: 0.2rem 0 0.8rem 0;
+        ">
+            <div style="
+                font-size: 0.85rem;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                color: #334155;
+            ">
+                ✦ AI DOCUMENT INTELLIGENCE
+            </div>
+
+            <div style="
+                font-size: 2rem;
+                font-weight: 800;
+                color: #172554;
+                margin-top: 0.1rem;
+            ">
+                Credential Intelligence
+            </div>
+
+            <div style="
+                font-size: 0.9rem;
+                color: #64748b;
+                margin-top: 0.2rem;
+            ">
                 AI-powered document extraction, human verification,
                 and secure credential management.
             </div>
@@ -119,43 +146,19 @@ def render_dashboard(supabase):
         unsafe_allow_html=True,
     )
 
+    # ========================================================
+    # COMPACT STYLING
+    # ========================================================
+
     st.markdown(
         """
         <style>
-        .adi-header {
-            text-align: center;
-            padding: 0.2rem 0 1rem 0;
-        }
-
-        .adi-kicker {
-            font-size: 0.85rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            color: #334155;
-        }
-
-        .adi-title {
-            font-size: 2rem;
-            font-weight: 800;
-            color: #172554;
-            margin-top: 0.15rem;
-        }
-
-        .adi-subtitle {
-            font-size: 0.95rem;
-            color: #64748b;
-            margin-top: 0.25rem;
-        }
-
-        .system-panel {
-            padding: 0.4rem 0;
-        }
 
         .system-item {
             padding: 0.55rem 0.7rem;
             margin-bottom: 0.45rem;
             border-radius: 10px;
-            background: rgba(255,255,255,0.75);
+            background: rgba(255, 255, 255, 0.75);
             border: 1px solid #e2e8f0;
         }
 
@@ -172,31 +175,28 @@ def render_dashboard(supabase):
         }
 
         .workflow-step {
-            padding: 0.38rem 0;
+            padding: 0.3rem 0;
             font-size: 0.82rem;
             color: #334155;
         }
 
-        .workspace-title {
-            font-size: 1.35rem;
-            font-weight: 800;
-            color: #172554;
-            margin-bottom: 0.7rem;
-        }
-
-        .workspace-card {
-            padding: 0.25rem 0;
-        }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    left_column, main_column = st.columns([1, 3.6], gap="large")
+    # ========================================================
+    # TWO-COLUMN DASHBOARD
+    # ========================================================
 
-    # ---------------------------------------------------------
-    # LEFT SIDE
-    # ---------------------------------------------------------
+    left_column, main_column = st.columns(
+        [1, 3.6],
+        gap="large",
+    )
+
+    # ========================================================
+    # LEFT COLUMN
+    # ========================================================
 
     with left_column:
 
@@ -204,28 +204,24 @@ def render_dashboard(supabase):
 
         st.markdown(
             """
-            <div class="system-panel">
+            <div class="system-item">
+                <div class="system-label">✦ AI ENGINE</div>
+                <div class="system-value">Gemini</div>
+            </div>
 
-                <div class="system-item">
-                    <div class="system-label">✦ AI ENGINE</div>
-                    <div class="system-value">Gemini</div>
-                </div>
+            <div class="system-item">
+                <div class="system-label">● DATABASE</div>
+                <div class="system-value">Supabase PostgreSQL</div>
+            </div>
 
-                <div class="system-item">
-                    <div class="system-label">● DATABASE</div>
-                    <div class="system-value">Supabase PostgreSQL</div>
-                </div>
+            <div class="system-item">
+                <div class="system-label">🔒 SECURITY</div>
+                <div class="system-value">RLS Protected</div>
+            </div>
 
-                <div class="system-item">
-                    <div class="system-label">🔒 SECURITY</div>
-                    <div class="system-value">RLS Protected</div>
-                </div>
-
-                <div class="system-item">
-                    <div class="system-label">📄 PROCESSING</div>
-                    <div class="system-value">PDF Intelligence</div>
-                </div>
-
+            <div class="system-item">
+                <div class="system-label">📄 PROCESSING</div>
+                <div class="system-value">PDF Intelligence</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -244,23 +240,29 @@ def render_dashboard(supabase):
             unsafe_allow_html=True,
         )
 
-    # ---------------------------------------------------------
-    # MAIN WORKSPACE AREA
-    # ---------------------------------------------------------
+    # ========================================================
+    # MAIN COLUMN — WORKSPACES
+    # ========================================================
 
     with main_column:
 
         st.markdown(
-            '<div class="workspace-title">YOUR WORKSPACES</div>',
-            unsafe_allow_html=True,
+            "## YOUR WORKSPACES"
         )
 
-        workspaces = load_workspaces(supabase)
+        workspaces = load_workspaces(
+            supabase
+        )
 
         if not workspaces:
+
             st.info(
                 "No workspaces yet. Create your first workspace below."
             )
+
+        # ----------------------------------------------------
+        # WORKSPACE BUTTONS
+        # ----------------------------------------------------
 
         for workspace in workspaces:
 
@@ -272,21 +274,39 @@ def render_dashboard(supabase):
                 key=f"workspace_{workspace_id}",
                 use_container_width=True,
             ):
-                st.session_state["active_workspace_id"] = workspace_id
-                st.session_state["active_workspace_name"] = workspace_name
 
-            if st.session_state.get(
-                "active_workspace_id"
-            ) == workspace_id:
+                st.session_state[
+                    "active_workspace_id"
+                ] = workspace_id
+
+                st.session_state[
+                    "active_workspace_name"
+                ] = workspace_name
+
+                st.rerun()
+
+            # ------------------------------------------------
+            # REGISTERS INSIDE SELECTED WORKSPACE
+            # ------------------------------------------------
+
+            if (
+                st.session_state.get(
+                    "active_workspace_id"
+                )
+                == workspace_id
+            ):
 
                 registers = load_registers(
                     supabase,
                     workspace_id,
                 )
 
-                st.caption("Registers")
+                st.caption(
+                    "Registers"
+                )
 
                 if not registers:
+
                     st.info(
                         "No registers in this workspace yet."
                     )
@@ -301,6 +321,7 @@ def render_dashboard(supabase):
                         key=f"register_{register_id}",
                         use_container_width=True,
                     ):
+
                         st.session_state[
                             "active_schema_id"
                         ] = register_id
@@ -311,17 +332,27 @@ def render_dashboard(supabase):
 
                 st.divider()
 
-        # -----------------------------------------------------
-        # SMALL ACTION BOXES
-        # -----------------------------------------------------
+        # ====================================================
+        # ACTION BOXES
+        # ====================================================
 
-        action_col1, action_col2 = st.columns(2)
+        action_col1, action_col2 = st.columns(
+            2
+        )
+
+        # ----------------------------------------------------
+        # ADD WORKSPACE
+        # ----------------------------------------------------
 
         with action_col1:
 
-            with st.container(border=True):
+            with st.container(
+                border=True
+            ):
 
-                st.markdown("**＋ Add Workspace**")
+                st.markdown(
+                    "**＋ Add Workspace**"
+                )
 
                 with st.form(
                     "dashboard_add_workspace_form"
@@ -360,13 +391,23 @@ def render_dashboard(supabase):
 
                         except Exception as exc:
 
-                            st.error(str(exc))
+                            st.error(
+                                str(exc)
+                            )
+
+        # ----------------------------------------------------
+        # ADD REGISTER
+        # ----------------------------------------------------
 
         with action_col2:
 
-            with st.container(border=True):
+            with st.container(
+                border=True
+            ):
 
-                st.markdown("**＋ Add Register**")
+                st.markdown(
+                    "**＋ Add Register**"
+                )
 
                 if not workspaces:
 
@@ -440,4 +481,6 @@ def render_dashboard(supabase):
 
                             except Exception as exc:
 
-                                st.error(str(exc))
+                                st.error(
+                                    str(exc)
+                                )
