@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 
 
@@ -89,4 +88,3 @@ def reset_after_ai_correction():
             key,
             None,
         )
-```
