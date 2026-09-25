@@ -100,7 +100,11 @@ def create_register(supabase, workspace_id, name, description):
 
 def render_dashboard(supabase):
     """Render the main application dashboard."""
-    # Compact centered header
+
+    # ========================================================
+    # COMPACT CENTERED HEADER
+    # ========================================================
+
     st.markdown(
         "<div style='text-align:center; "
         "font-size:0.78rem; font-weight:700; "
@@ -135,7 +139,10 @@ def render_dashboard(supabase):
         unsafe_allow_html=True,
     )
 
-    # Compact styling
+    # ========================================================
+    # COMPACT STYLING
+    # ========================================================
+
     st.markdown(
         """
         <style>
@@ -148,6 +155,14 @@ def render_dashboard(supabase):
             div.stButton > button p {
                 text-align: left !important;
                 width: 100%;
+            }
+
+            .workspace-section-title {
+                font-size: 1.45rem;
+                font-weight: 750;
+                color: #172554;
+                margin-bottom: 0.7rem;
+                text-align: left !important;
             }
 
             .system-item {
@@ -180,10 +195,16 @@ def render_dashboard(supabase):
         unsafe_allow_html=True,
     )
 
-    # Two-column dashboard
+    # ========================================================
+    # TWO-COLUMN DASHBOARD
+    # ========================================================
+
     left_column, main_column = st.columns([1, 3.6], gap="large")
 
-    # Left column
+    # ========================================================
+    # LEFT COLUMN
+    # ========================================================
+
     with left_column:
         st.markdown("### System Overview")
 
@@ -225,14 +246,13 @@ def render_dashboard(supabase):
             unsafe_allow_html=True,
         )
 
-    # Main column — workspaces
+    # ========================================================
+    # MAIN COLUMN — WORKSPACES
+    # ========================================================
+
     with main_column:
         st.markdown(
-            "<div style='font-size:1.45rem; "
-            "font-weight:750; color:#172554; "
-            "margin-bottom:0.7rem;'>"
-            "YOUR WORKSPACES"
-            "</div>",
+            "<div class='workspace-section-title'>YOUR WORKSPACES</div>",
             unsafe_allow_html=True,
         )
 
@@ -241,11 +261,15 @@ def render_dashboard(supabase):
         if not workspaces:
             st.info("No workspaces yet. Create your first workspace below.")
 
-        # Workspace buttons
+        # ----------------------------------------------------
+        # WORKSPACE BUTTONS
+        # ----------------------------------------------------
+
         for workspace in workspaces:
             workspace_id = workspace["id"]
             workspace_name = workspace["name"]
 
+            # Workspace
             if st.button(
                 f"Workspace — {workspace_name}",
                 key=f"workspace_{workspace_id}",
@@ -255,6 +279,7 @@ def render_dashboard(supabase):
                 st.session_state["active_workspace_name"] = workspace_name
                 st.rerun()
 
+            # Registers belonging to this workspace
             if st.session_state.get("active_workspace_id") == workspace_id:
                 registers = load_registers(supabase, workspace_id)
 
@@ -280,10 +305,16 @@ def render_dashboard(supabase):
                     unsafe_allow_html=True,
                 )
 
-        # Action boxes
+        # ====================================================
+        # ACTION BOXES
+        # ====================================================
+
         action_col1, action_col2 = st.columns(2)
 
-        # Add workspace
+        # ----------------------------------------------------
+        # ADD WORKSPACE
+        # ----------------------------------------------------
+
         with action_col1:
             with st.container(border=True):
                 st.markdown("**＋ Add Workspace**")
@@ -314,7 +345,10 @@ def render_dashboard(supabase):
                         except Exception as exc:
                             st.error(str(exc))
 
-        # Add register
+        # ----------------------------------------------------
+        # ADD REGISTER
+        # ----------------------------------------------------
+
         with action_col2:
             with st.container(border=True):
                 st.markdown("**＋ Add Register**")
