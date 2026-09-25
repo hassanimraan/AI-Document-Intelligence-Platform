@@ -17,6 +17,7 @@ from ui.upload_ui import render_upload_ui
 from ui.review_ui import render_review_ui
 from ui.correction_ui import render_correction_ui
 from ui.records_ui import render_records_ui
+from ui.workspace_ui import render_workspace_ui
 
 
 # ============================================================
@@ -59,6 +60,13 @@ render_ai_hero()
 render_status_cards()
 render_workflow()
 
+# ============================================================
+# V2 WORKSPACE MANAGEMENT
+# ============================================================
+
+render_workspace_ui(
+    supabase
+)
 # ============================================================
 # USER INFORMATION / LOGOUT
 # ============================================================
