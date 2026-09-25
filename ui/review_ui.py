@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 
 from config.schema import EXTRACTION_FIELDS
@@ -562,4 +561,3 @@ def render_review_ui():
 
     render_manual_review()
     render_final_verification()
-```
