@@ -341,11 +341,11 @@ def render_upload_ui():
                 f"PDF processing failed: {exc}"
             )
 
-        except Exception:
+                except Exception as exc:
             st.error(
-                "PDF processing could not be completed. "
-                "Please verify the document and try again."
+                "PDF processing could not be completed."
             )
+            st.exception(exc)
 
     # ========================================================
     # EXTRACTED TEXT
