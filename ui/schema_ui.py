@@ -3,7 +3,6 @@ import streamlit as st
 def _get_active_workspace_id():
 """Return the currently selected workspace ID."""
 
-```
 workspace_id = st.session_state.get(
     "active_workspace_id"
 )
@@ -14,12 +13,10 @@ if not workspace_id:
     )
 
 return workspace_id
-```
 
 def load_schemas(supabase):
 """Load active registers belonging to the active workspace."""
 
-```
 workspace_id = _get_active_workspace_id()
 
 response = (
@@ -33,7 +30,6 @@ response = (
 )
 
 return response.data or []
-```
 
 def create_schema(
 supabase,
@@ -42,7 +38,6 @@ description,
 ):
 """Create a new document register/schema."""
 
-```
 name = name.strip()
 description = description.strip()
 
@@ -74,7 +69,6 @@ if not response.data:
     )
 
 return response.data[0]
-```
 
 def get_record_count(
 supabase,
@@ -82,7 +76,6 @@ schema_id,
 ):
 """Return the number of records associated with a register."""
 
-```
 response = (
     supabase
     .table("document_records")
@@ -92,7 +85,6 @@ response = (
 )
 
 return len(response.data or [])
-```
 
 def deactivate_schema(
 supabase,
@@ -100,7 +92,6 @@ schema_id,
 ):
 """Deactivate a register without deleting its records."""
 
-```
 workspace_id = _get_active_workspace_id()
 
 response = (
@@ -142,12 +133,10 @@ if (
         "structure_headers",
         None,
     )
-```
 
 def render_schema_ui(supabase):
 """Render register/schema management."""
 
-```
 active_workspace_id = st.session_state.get(
     "active_workspace_id"
 )
@@ -492,4 +481,3 @@ if active_schema_id:
     st.caption(
         f"Register ID: {active_schema_id}"
     )
-```
