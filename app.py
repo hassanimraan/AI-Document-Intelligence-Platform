@@ -18,7 +18,7 @@ from ui.review_ui import render_review_ui
 from ui.correction_ui import render_correction_ui
 from ui.records_ui import render_records_ui
 from ui.workspace_ui import render_workspace_ui
-
+from ui.schema_ui import render_schema_ui
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -65,6 +65,13 @@ render_workflow()
 # ============================================================
 
 render_workspace_ui(
+    supabase
+)
+# ============================================================
+# V2 REGISTER / SCHEMA MANAGEMENT
+# ============================================================
+
+render_schema_ui(
     supabase
 )
 # ============================================================
