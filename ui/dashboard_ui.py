@@ -147,20 +147,19 @@ def render_dashboard(supabase):
     # COMPACT STYLING
     # ========================================================
 
-        st.markdown(
-            """
-            <style>
+    st.markdown(
+        <style>
 
-            /* Left-align workspace and register buttons */
-            div.stButton > button {
-                justify-content: flex-start !important;
-                text-align: left !important;
-            }
+           /* Left-align workspace and register buttons */
+           div.stButton > button {
+               justify-content: flex-start !important;
+               text-align: left !important;
+           }
 
-            div.stButton > button p {
-                text-align: left !important;
-                width: 100%;
-            }
+           div.stButton > button p {
+               text-align: left !important;
+               width: 100%;
+        }
 
             .system-item {
                 padding: 0.55rem 0.7rem;
@@ -189,7 +188,7 @@ def render_dashboard(supabase):
             }
 
             </style>
-            """,
+            ,
             unsafe_allow_html=True,
         )
 
