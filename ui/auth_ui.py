@@ -59,6 +59,7 @@ def initialize_auth_state():
         "access_token": None,
         "refresh_token": None,
         "user_email": None,
+        "user_id": None,
     }
 
     for key, value in defaults.items():
@@ -73,6 +74,7 @@ def _clear_auth_state():
     st.session_state.access_token = None
     st.session_state.refresh_token = None
     st.session_state.user_email = None
+    st.session_state.user_id = None
 
 
 def _clear_workflow_state():
@@ -116,9 +118,9 @@ def _clear_login_form_state():
     """Clear temporary login/signup form values."""
 
     form_keys = [
-        "login_email",
+        "login_",
         "login_password",
-        "signup_email_form",
+        "signup__form",
         "signup_password_form",
         "signup_password_confirm_form",
     ]
@@ -258,7 +260,10 @@ def restore_session(supabase):
         st.session_state.user_email = (
             user_email
         )
-
+        
+        st.session_state.user_id = (
+            user.id
+        )
         st.session_state.authenticated = True
 
         return True
@@ -352,7 +357,10 @@ def login_user(
     st.session_state.user_email = (
         user_email
     )
-
+    
+    st.session_state.user_id = (
+        user.id
+    )
 
 # ============================================================
 # SIGNUP
@@ -430,6 +438,9 @@ def signup_user(
             response.user.email
         )
 
+        st.session_state.user_id = (
+        response.user.id
+        )
     return response
 
 
