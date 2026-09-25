@@ -1,4 +1,3 @@
-```python
 import json
 
 import streamlit as st
@@ -376,4 +375,3 @@ def render_upload_ui():
             expanded=False,
         ):
             st.text(extracted_text)
-```
