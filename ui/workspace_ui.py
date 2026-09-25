@@ -207,21 +207,19 @@ def render_workspace_ui(supabase):
 
             with col2:
 
-                if st.button(
+               if st.button(
                     "Open",
                     key=f"open_workspace_{workspace_id}",
                     use_container_width=True,
                 ):
-
+                
                     st.session_state[
                         "active_workspace_id"
                     ] = workspace_id
-
+                
                     st.session_state[
                         "active_workspace_name"
                     ] = workspace_name
-
-                    st.rerun()
 
     # ========================================================
     # ACTIVE WORKSPACE
