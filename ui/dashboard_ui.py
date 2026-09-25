@@ -147,40 +147,51 @@ def render_dashboard(supabase):
     # COMPACT STYLING
     # ========================================================
 
-    st.markdown(
-        """
-        <style>
+        st.markdown(
+            """
+            <style>
 
-        .system-item {
-            padding: 0.55rem 0.7rem;
-            margin-bottom: 0.45rem;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.75);
-            border: 1px solid #e2e8f0;
-        }
+            /* Left-align workspace and register buttons */
+            div.stButton > button {
+                justify-content: flex-start !important;
+                text-align: left !important;
+            }
 
-        .system-label {
-            font-size: 0.72rem;
-            font-weight: 800;
-            color: #475569;
-        }
+            div.stButton > button p {
+                text-align: left !important;
+                width: 100%;
+            }
 
-        .system-value {
-            font-size: 0.82rem;
-            color: #1e293b;
-            margin-top: 0.1rem;
-        }
+            .system-item {
+                padding: 0.55rem 0.7rem;
+                margin-bottom: 0.45rem;
+                border-radius: 10px;
+                background: rgba(255, 255, 255, 0.75);
+                border: 1px solid #e2e8f0;
+            }
 
-        .workflow-step {
-            padding: 0.3rem 0;
-            font-size: 0.82rem;
-            color: #334155;
-        }
+            .system-label {
+                font-size: 0.72rem;
+                font-weight: 800;
+                color: #475569;
+            }
 
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+            .system-value {
+                font-size: 0.82rem;
+                color: #1e293b;
+                margin-top: 0.1rem;
+            }
+
+            .workflow-step {
+                padding: 0.3rem 0;
+                font-size: 0.82rem;
+                color: #334155;
+            }
+
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # ========================================================
     # TWO-COLUMN DASHBOARD
