@@ -105,47 +105,43 @@ def create_register(supabase, workspace_id, name, description):
 def render_dashboard(supabase):
     """Render the main application dashboard."""
 
-    # ========================================================
-    # COMPACT CENTERED HEADER
-    # ========================================================
+# ========================================================
+# COMPACT CENTERED HEADER
+# ========================================================
 
-    st.markdown(
-        """
-        <div style="
-            text-align: center;
-            padding: 0.2rem 0 0.8rem 0;
-        ">
-            <div style="
-                font-size: 0.85rem;
-                font-weight: 700;
-                letter-spacing: 0.08em;
-                color: #334155;
-            ">
-                ✦ AI DOCUMENT INTELLIGENCE
-            </div>
+st.markdown(
+    "<div style='text-align:center; "
+    "font-size:0.78rem; font-weight:700; "
+    "letter-spacing:0.08em; color:#475569;'>"
+    "✦ AI DOCUMENT INTELLIGENCE"
+    "</div>",
+    unsafe_allow_html=True,
+)
 
-            <div style="
-                font-size: 2rem;
-                font-weight: 800;
-                color: #172554;
-                margin-top: 0.1rem;
-            ">
-                Credential Intelligence
-            </div>
+st.markdown(
+    "<div style='text-align:center; "
+    "font-size:2.4rem; font-weight:800; "
+    "color:#172554; margin-top:0.05rem;'>"
+    "Credential Intelligence"
+    "</div>",
+    unsafe_allow_html=True,
+)
 
-            <div style="
-                font-size: 0.9rem;
-                color: #64748b;
-                margin-top: 0.2rem;
-            ">
-                AI-powered document extraction, human verification,
-                and secure credential management.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+st.markdown(
+    "<div style='text-align:center; "
+    "font-size:0.9rem; color:#64748b; "
+    "margin-top:0.15rem;'>"
+    "AI-powered document extraction, human verification, "
+    "and secure credential management."
+    "</div>",
+    unsafe_allow_html=True,
+)
 
+st.markdown(
+    "<hr style='margin:0.8rem 0 1.2rem 0; "
+    "border:none; border-top:1px solid #e2e8f0;'>",
+    unsafe_allow_html=True,
+)
     # ========================================================
     # COMPACT STYLING
     # ========================================================
@@ -247,7 +243,12 @@ def render_dashboard(supabase):
     with main_column:
 
         st.markdown(
-            "## YOUR WORKSPACES"
+            "<div style='font-size:1.45rem; "
+            "font-weight:750; color:#172554; "
+            "margin-bottom:0.7rem;'>"
+            "YOUR WORKSPACES"
+            "</div>",
+            unsafe_allow_html=True,
         )
 
         workspaces = load_workspaces(
