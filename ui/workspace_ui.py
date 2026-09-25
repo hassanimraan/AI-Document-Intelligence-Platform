@@ -2,13 +2,7 @@ import streamlit as st
 
 
 def _get_user_id():
-    """
-    Get the authenticated Supabase user ID.
-
-    The authentication system already establishes the
-    authenticated session. We use the Supabase user ID
-    as the ownership key for workspace operations.
-    """
+    """Return the currently authenticated Supabase user ID."""
 
     user_id = st.session_state.get("user_id")
 
@@ -20,32 +14,9 @@ def _get_user_id():
     return user_id
 
 
-def _get_supabase_client():
-    """
-    Reuse the authenticated Supabase client already
-    created by the application.
-    """
+def load_workspaces(supabase):
+    """Load active workspaces belonging to the current user."""
 
-    supabase = st.session_state.get(
-        "supabase_client"
-    )
-
-    if supabase is None:
-        raise ValueError(
-            "Supabase client is not available."
-        )
-
-    return supabase
-
-
-def load_workspaces():
-    """
-    Load workspaces belonging to the authenticated user.
-
-    RLS remains the final database-level security boundary.
-    """
-
-    supabase = _get_supabase_client()
     user_id = _get_user_id()
 
     response = (
@@ -62,12 +33,11 @@ def load_workspaces():
 
 
 def create_workspace(
+    supabase,
     name,
     description,
 ):
-    """
-    Create a new workspace for the authenticated user.
-    """
+    """Create a workspace for the authenticated user."""
 
     name = name.strip()
     description = description.strip()
@@ -77,7 +47,6 @@ def create_workspace(
             "Workspace name is required."
         )
 
-    supabase = _get_supabase_client()
     user_id = _get_user_id()
 
     response = (
@@ -102,10 +71,8 @@ def create_workspace(
     return response.data[0]
 
 
-def render_workspace_ui():
-    """
-    Render the V2 workspace management interface.
-    """
+def render_workspace_ui(supabase):
+    """Render V2 workspace management."""
 
     st.header(
         "🏢 Workspaces"
@@ -115,9 +82,9 @@ def render_workspace_ui():
         "Create and manage independent document workspaces."
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # CREATE WORKSPACE
-    # --------------------------------------------------------
+    # ========================================================
 
     with st.expander(
         "➕ Create New Workspace",
@@ -137,7 +104,7 @@ def render_workspace_ui():
             workspace_description = st.text_area(
                 "Description",
                 placeholder=(
-                    "Describe what documents or records "
+                    "Describe the documents or records "
                     "this workspace will contain."
                 ),
             )
@@ -152,6 +119,7 @@ def render_workspace_ui():
                 try:
 
                     create_workspace(
+                        supabase,
                         workspace_name,
                         workspace_description,
                     )
@@ -168,9 +136,9 @@ def render_workspace_ui():
                         f"Workspace could not be created: {exc}"
                     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # EXISTING WORKSPACES
-    # --------------------------------------------------------
+    # ========================================================
 
     st.subheader(
         "Your Workspaces"
@@ -178,7 +146,9 @@ def render_workspace_ui():
 
     try:
 
-        workspaces = load_workspaces()
+        workspaces = load_workspaces(
+            supabase
+        )
 
     except Exception as exc:
 
@@ -253,9 +223,9 @@ def render_workspace_ui():
 
                     st.rerun()
 
-    # --------------------------------------------------------
+    # ========================================================
     # ACTIVE WORKSPACE
-    # --------------------------------------------------------
+    # ========================================================
 
     active_workspace_id = st.session_state.get(
         "active_workspace_id"
