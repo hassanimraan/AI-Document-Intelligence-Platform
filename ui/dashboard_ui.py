@@ -269,8 +269,9 @@ def render_dashboard(supabase):
             workspace_id = workspace["id"]
             workspace_name = workspace["name"]
 
+            # Workspace button
             if st.button(
-                f"📁  {workspace_name}",
+                f"Workspace — {workspace_name}",
                 key=f"workspace_{workspace_id}",
                 use_container_width=True,
             ):
@@ -285,10 +286,7 @@ def render_dashboard(supabase):
 
                 st.rerun()
 
-            # ------------------------------------------------
-            # REGISTERS INSIDE SELECTED WORKSPACE
-            # ------------------------------------------------
-
+            # Show registers directly under the workspace
             if (
                 st.session_state.get(
                     "active_workspace_id"
@@ -301,34 +299,43 @@ def render_dashboard(supabase):
                     workspace_id,
                 )
 
-                st.caption("Registers")
-
                 if not registers:
 
-                    st.info(
-                        "No registers in this workspace yet."
+                    st.caption(
+                        "└─ No registers yet"
                     )
 
-                for register in registers:
+                else:
 
-                    register_id = register["id"]
-                    register_name = register["name"]
+                    for register in registers:
 
-                    if st.button(
-                        f"📋  {register_name}",
-                        key=f"register_{register_id}",
-                        use_container_width=True,
-                    ):
+                        register_id = register["id"]
+                        register_name = register["name"]
 
-                        st.session_state[
-                            "active_schema_id"
-                        ] = register_id
+                        if st.button(
+                            f"　└─ Register — {register_name}",
+                            key=f"register_{register_id}",
+                            use_container_width=True,
+                        ):
 
-                        st.session_state[
-                            "active_schema_name"
-                        ] = register_name
+                            st.session_state[
+                                "active_schema_id"
+                            ] = register_id
 
-                st.divider()
+                            st.session_state[
+                                "active_schema_name"
+                            ] = register_name
+
+                            st.session_state[
+                                "register_setup_mode"
+                            ] = True
+
+                            st.rerun()
+
+                st.markdown(
+                    "<div style='height:0.45rem;'></div>",
+                    unsafe_allow_html=True,
+                )
 
         # ====================================================
         # ACTION BOXES
