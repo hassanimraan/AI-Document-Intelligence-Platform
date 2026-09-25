@@ -2,7 +2,6 @@ import streamlit as st
 
 def _get_active_workspace_id():
 """Return the currently selected workspace ID."""
-
 workspace_id = st.session_state.get("active_workspace_id")
 
 if not workspace_id:
@@ -10,11 +9,8 @@ if not workspace_id:
 
 return workspace_id
 
-
 def load_schemas(supabase):
 """Load active registers belonging to the active workspace."""
-
-
 workspace_id = _get_active_workspace_id()
 
 response = (
@@ -29,11 +25,8 @@ response = (
 
 return response.data or []
 
-
 def create_schema(supabase, name, description):
 """Create a new document register/schema."""
-
-
 name = name.strip()
 description = description.strip()
 
@@ -62,29 +55,23 @@ if not response.data:
 
 return response.data[0]
 
-
 def get_record_count(supabase, schema_id):
 """Return the number of records belonging to a register."""
-
-
 response = (
-    supabase
-    .table("document_records")
-    .select("id")
-    .eq("schema_id", schema_id)
-    .execute()
+supabase
+.table("document_records")
+.select("id")
+.eq("schema_id", schema_id)
+.execute()
 )
 
 return len(response.data or [])
 
-
 def delete_schema(supabase, schema_id):
-"""Delete a register and all associated records and fields."""
-
-
+"""Delete a register and its associated data."""
 workspace_id = _get_active_workspace_id()
 
-# Verify that the register belongs to the active workspace.
+# Verify the register belongs to the active workspace.
 schema_response = (
     supabase
     .table("document_schemas")
@@ -100,7 +87,7 @@ if not schema_response.data:
         "Register could not be found in the active workspace."
     )
 
-# Delete document records first.
+# Delete records belonging to this register.
 (
     supabase
     .table("document_records")
@@ -110,7 +97,7 @@ if not schema_response.data:
     .execute()
 )
 
-# Delete register fields.
+# Delete fields belonging to this register.
 (
     supabase
     .table("schema_fields")
@@ -119,7 +106,7 @@ if not schema_response.data:
     .execute()
 )
 
-# Delete the register.
+# Delete the register itself.
 delete_response = (
     supabase
     .table("document_schemas")
@@ -132,7 +119,7 @@ delete_response = (
 if not delete_response.data:
     raise ValueError("Register could not be deleted.")
 
-# Clear active register if it was deleted.
+# Clear active register state if necessary.
 if st.session_state.get("active_schema_id") == schema_id:
     st.session_state.pop("active_schema_id", None)
     st.session_state.pop("active_schema_name", None)
@@ -196,7 +183,6 @@ with st.expander(
         if submitted:
 
             try:
-
                 create_schema(
                     supabase,
                     schema_name,
@@ -210,7 +196,6 @@ with st.expander(
                 st.rerun()
 
             except Exception as exc:
-
                 st.error(
                     f"Register could not be created: {exc}"
                 )
@@ -224,23 +209,18 @@ st.subheader(
 )
 
 try:
-
     schemas = load_schemas(supabase)
 
 except Exception as exc:
-
     st.error(
         f"Registers could not be loaded: {exc}"
     )
-
     return
 
 if not schemas:
-
     st.info(
         "No registers have been created in this workspace yet."
     )
-
     return
 
 for schema in schemas:
@@ -265,7 +245,6 @@ for schema in schemas:
             )
 
             if schema_description:
-
                 st.caption(
                     schema_description
                 )
@@ -337,29 +316,24 @@ if pending_delete_schema_id:
     )
 
     try:
-
         record_count = get_record_count(
             supabase,
             pending_delete_schema_id,
         )
 
     except Exception:
-
         record_count = None
 
     if record_count is not None:
 
         if record_count > 0:
-
             st.error(
                 f"This register currently contains "
                 f"**{record_count} record(s)**. "
                 "Deleting the register will permanently "
                 "delete these records as well."
             )
-
         else:
-
             st.info(
                 "This register currently has no saved records."
             )
@@ -395,7 +369,6 @@ if pending_delete_schema_id:
         confirm_text = "Delete Register Permanently"
 
         if record_count and record_count > 0:
-
             confirm_text = "Delete Register + Records"
 
         if st.button(
@@ -406,7 +379,6 @@ if pending_delete_schema_id:
         ):
 
             try:
-
                 delete_schema(
                     supabase,
                     pending_delete_schema_id,
@@ -429,7 +401,6 @@ if pending_delete_schema_id:
                 st.rerun()
 
             except Exception as exc:
-
                 st.error(
                     f"Register could not be deleted: {exc}"
                 )
