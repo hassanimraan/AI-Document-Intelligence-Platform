@@ -1,11 +1,7 @@
+```python
 import streamlit as st
 
-from ui.theme import (
-    apply_app_theme,
-    render_ai_hero,
-    render_status_cards,
-    render_workflow,
-)
+from ui.theme import apply_app_theme
 
 from ui.auth_ui import (
     get_supabase_client,
@@ -13,24 +9,26 @@ from ui.auth_ui import (
     logout_user,
 )
 
-from ui.upload_ui import render_upload_ui
-from ui.review_ui import render_review_ui
-from ui.correction_ui import render_correction_ui
-from ui.records_ui import render_records_ui
 from ui.dashboard_ui import render_dashboard
+
 
 # ============================================================
 # PAGE CONFIGURATION
 # ============================================================
 
 st.set_page_config(
-    
-    page_title="Credential Extraction Chatbot",
+    page_title="AI Document Intelligence",
     page_icon="📄",
     layout="wide",
 )
 
+
+# ============================================================
+# APPLICATION THEME
+# ============================================================
+
 apply_app_theme()
+
 
 # ============================================================
 # SUPABASE CLIENT
@@ -52,20 +50,14 @@ if not authenticated:
 
 
 # ============================================================
-# APPLICATION HEADER
-# ============================================================
-
-render_ai_hero()
-render_status_cards()
-render_workflow()
-
-# ============================================================
-# V2 MAIN DASHBOARD
+# MAIN DASHBOARD
 # ============================================================
 
 render_dashboard(
     supabase
 )
+
+
 # ============================================================
 # USER INFORMATION / LOGOUT
 # ============================================================
@@ -76,8 +68,10 @@ user_email = st.session_state.get(
 
 if user_email:
 
+    st.divider()
+
     col1, col2 = st.columns(
-        [4, 1]
+        [5, 1]
     )
 
     with col1:
@@ -91,6 +85,7 @@ if user_email:
         if st.button(
             "Logout",
             key="logout_button",
+            use_container_width=True,
         ):
 
             logout_user(
@@ -101,40 +96,27 @@ if user_email:
 
 
 # ============================================================
-# DOCUMENT SELECTION & PROCESSING
+# TEMPORARILY DISABLED OLD PROCESSING UI
 # ============================================================
-
-render_upload_ui()
-
-
+#
+# These modules remain in the project.
+# They will be connected to the new workflow later:
+#
+# render_upload_ui()
+# render_review_ui()
+# render_correction_ui()
+# render_records_ui()
+#
+# Do NOT delete those files.
 # ============================================================
-# HUMAN REVIEW
-# ============================================================
-
-render_review_ui()
-
-
-# ============================================================
-# NATURAL-LANGUAGE AI CORRECTION
-# ============================================================
-
-render_correction_ui()
-
-
-# ============================================================
-# SAVED RECORDS
-# ============================================================
-
-render_records_ui()
 
 
 # ============================================================
 # FOOTER
 # ============================================================
 
-st.divider()
-
 st.caption(
-    "Credential Extraction Chatbot • "
+    "AI Document Intelligence • "
     "Supabase PostgreSQL • Google Gemini"
 )
+```
