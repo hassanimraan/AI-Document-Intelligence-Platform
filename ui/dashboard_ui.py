@@ -16,8 +16,7 @@ def load_workspaces(supabase):
     user_id = _get_user_id()
 
     response = (
-        supabase
-        .table("workspaces")
+        supabase.table("workspaces")
         .select("*")
         .eq("user_id", user_id)
         .eq("is_active", True)
@@ -31,8 +30,7 @@ def load_workspaces(supabase):
 def load_registers(supabase, workspace_id):
     """Load active registers belonging to a workspace."""
     response = (
-        supabase
-        .table("document_schemas")
+        supabase.table("document_schemas")
         .select("*")
         .eq("workspace_id", workspace_id)
         .eq("is_active", True)
@@ -54,8 +52,7 @@ def create_workspace(supabase, name, description):
     user_id = _get_user_id()
 
     response = (
-        supabase
-        .table("workspaces")
+        supabase.table("workspaces")
         .insert(
             {
                 "user_id": user_id,
@@ -82,8 +79,7 @@ def create_register(supabase, workspace_id, name, description):
         raise ValueError("Register name is required.")
 
     response = (
-        supabase
-        .table("document_schemas")
+        supabase.table("document_schemas")
         .insert(
             {
                 "workspace_id": workspace_id,
@@ -104,11 +100,7 @@ def create_register(supabase, workspace_id, name, description):
 
 def render_dashboard(supabase):
     """Render the main application dashboard."""
-
-    # ========================================================
-    # COMPACT CENTERED HEADER
-    # ========================================================
-
+    # Compact centered header
     st.markdown(
         "<div style='text-align:center; "
         "font-size:0.78rem; font-weight:700; "
@@ -143,23 +135,20 @@ def render_dashboard(supabase):
         unsafe_allow_html=True,
     )
 
-    # ========================================================
-    # COMPACT STYLING
-    # ========================================================
-
+    # Compact styling
     st.markdown(
+        """
         <style>
+            /* Left-align workspace and register buttons */
+            div.stButton > button {
+                justify-content: flex-start !important;
+                text-align: left !important;
+            }
 
-           /* Left-align workspace and register buttons */
-           div.stButton > button {
-               justify-content: flex-start !important;
-               text-align: left !important;
-           }
-
-           div.stButton > button p {
-               text-align: left !important;
-               width: 100%;
-        }
+            div.stButton > button p {
+                text-align: left !important;
+                width: 100%;
+            }
 
             .system-item {
                 padding: 0.55rem 0.7rem;
@@ -186,27 +175,16 @@ def render_dashboard(supabase):
                 font-size: 0.82rem;
                 color: #334155;
             }
-
-            </style>
-            ,
-            unsafe_allow_html=True,
-        )
-
-    # ========================================================
-    # TWO-COLUMN DASHBOARD
-    # ========================================================
-
-    left_column, main_column = st.columns(
-        [1, 3.6],
-        gap="large",
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
-    # ========================================================
-    # LEFT COLUMN
-    # ========================================================
+    # Two-column dashboard
+    left_column, main_column = st.columns([1, 3.6], gap="large")
 
+    # Left column
     with left_column:
-
         st.markdown("### System Overview")
 
         st.markdown(
@@ -247,12 +225,8 @@ def render_dashboard(supabase):
             unsafe_allow_html=True,
         )
 
-    # ========================================================
-    # MAIN COLUMN — WORKSPACES
-    # ========================================================
-
+    # Main column — workspaces
     with main_column:
-
         st.markdown(
             "<div style='font-size:1.45rem; "
             "font-weight:750; color:#172554; "
@@ -265,60 +239,29 @@ def render_dashboard(supabase):
         workspaces = load_workspaces(supabase)
 
         if not workspaces:
+            st.info("No workspaces yet. Create your first workspace below.")
 
-            st.info(
-                "No workspaces yet. Create your first workspace below."
-            )
-
-        # ----------------------------------------------------
-        # WORKSPACE BUTTONS
-        # ----------------------------------------------------
-
+        # Workspace buttons
         for workspace in workspaces:
-
             workspace_id = workspace["id"]
             workspace_name = workspace["name"]
 
-            # Workspace
             if st.button(
                 f"Workspace — {workspace_name}",
                 key=f"workspace_{workspace_id}",
                 use_container_width=True,
             ):
-
-                st.session_state[
-                    "active_workspace_id"
-                ] = workspace_id
-
-                st.session_state[
-                    "active_workspace_name"
-                ] = workspace_name
-
+                st.session_state["active_workspace_id"] = workspace_id
+                st.session_state["active_workspace_name"] = workspace_name
                 st.rerun()
 
-            # Registers belonging to this workspace
-            if (
-                st.session_state.get(
-                    "active_workspace_id"
-                )
-                == workspace_id
-            ):
-
-                registers = load_registers(
-                    supabase,
-                    workspace_id,
-                )
+            if st.session_state.get("active_workspace_id") == workspace_id:
+                registers = load_registers(supabase, workspace_id)
 
                 if not registers:
-
-                    st.caption(
-                        "└─ No registers yet"
-                    )
-
+                    st.caption("└─ No registers yet")
                 else:
-
                     for register in registers:
-
                         register_id = register["id"]
                         register_name = register["name"]
 
@@ -327,160 +270,93 @@ def render_dashboard(supabase):
                             key=f"register_{register_id}",
                             use_container_width=True,
                         ):
-
-                            st.session_state[
-                                "active_schema_id"
-                            ] = register_id
-
-                            st.session_state[
-                                "active_schema_name"
-                            ] = register_name
-
-                            st.session_state[
-                                "register_setup_mode"
-                            ] = True
-
+                            st.session_state["active_schema_id"] = register_id
+                            st.session_state["active_schema_name"] = register_name
+                            st.session_state["register_setup_mode"] = True
                             st.rerun()
 
                 st.markdown(
                     "<div style='height:0.45rem;'></div>",
                     unsafe_allow_html=True,
                 )
-        # ====================================================
-        # ACTION BOXES
-        # ====================================================
 
+        # Action boxes
         action_col1, action_col2 = st.columns(2)
 
-        # ----------------------------------------------------
-        # ADD WORKSPACE
-        # ----------------------------------------------------
-
+        # Add workspace
         with action_col1:
-
             with st.container(border=True):
-
                 st.markdown("**＋ Add Workspace**")
 
-                with st.form(
-                    "dashboard_add_workspace_form"
-                ):
-
+                with st.form("dashboard_add_workspace_form"):
                     workspace_name = st.text_input(
                         "Workspace name",
                         placeholder="e.g. PMA Documents",
                     )
-
                     workspace_description = st.text_input(
                         "Description",
                         placeholder="Optional",
                     )
-
                     submitted = st.form_submit_button(
                         "Create Workspace",
                         use_container_width=True,
                     )
 
                     if submitted:
-
                         try:
-
                             create_workspace(
                                 supabase,
                                 workspace_name,
                                 workspace_description,
                             )
-
-                            st.success(
-                                "Workspace created."
-                            )
-
+                            st.success("Workspace created.")
                             st.rerun()
-
                         except Exception as exc:
-
                             st.error(str(exc))
 
-        # ----------------------------------------------------
-        # ADD REGISTER
-        # ----------------------------------------------------
-
+        # Add register
         with action_col2:
-
             with st.container(border=True):
-
                 st.markdown("**＋ Add Register**")
 
                 if not workspaces:
-
-                    st.caption(
-                        "Create a workspace first."
-                    )
-
+                    st.caption("Create a workspace first.")
                 else:
-
                     workspace_options = {
                         workspace["name"]: workspace["id"]
                         for workspace in workspaces
                     }
 
-                    with st.form(
-                        "dashboard_add_register_form"
-                    ):
-
+                    with st.form("dashboard_add_register_form"):
                         selected_workspace = st.selectbox(
                             "Workspace",
-                            list(
-                                workspace_options.keys()
-                            ),
+                            list(workspace_options.keys()),
                         )
-
                         register_name = st.text_input(
                             "Register name",
                             placeholder="e.g. Credential Register",
                         )
-
                         register_description = st.text_input(
                             "Description",
                             placeholder="Optional",
                         )
-
                         submitted = st.form_submit_button(
                             "Create Register",
                             use_container_width=True,
                         )
 
                         if submitted:
-
                             try:
-
                                 schema = create_register(
                                     supabase,
-                                    workspace_options[
-                                        selected_workspace
-                                    ],
+                                    workspace_options[selected_workspace],
                                     register_name,
                                     register_description,
                                 )
-
-                                st.session_state[
-                                    "active_schema_id"
-                                ] = schema["id"]
-
-                                st.session_state[
-                                    "active_schema_name"
-                                ] = schema["name"]
-
-                                st.session_state[
-                                    "register_setup_mode"
-                                ] = True
-
-                                st.success(
-                                    "Register created."
-                                )
-
+                                st.session_state["active_schema_id"] = schema["id"]
+                                st.session_state["active_schema_name"] = schema["name"]
+                                st.session_state["register_setup_mode"] = True
+                                st.success("Register created.")
                                 st.rerun()
-
                             except Exception as exc:
-
                                 st.error(str(exc))
