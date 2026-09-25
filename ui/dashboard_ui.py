@@ -105,43 +105,44 @@ def create_register(supabase, workspace_id, name, description):
 def render_dashboard(supabase):
     """Render the main application dashboard."""
 
-# ========================================================
-# COMPACT CENTERED HEADER
-# ========================================================
+    # ========================================================
+    # COMPACT CENTERED HEADER
+    # ========================================================
 
-st.markdown(
-    "<div style='text-align:center; "
-    "font-size:0.78rem; font-weight:700; "
-    "letter-spacing:0.08em; color:#475569;'>"
-    "✦ AI DOCUMENT INTELLIGENCE"
-    "</div>",
-    unsafe_allow_html=True,
-)
+    st.markdown(
+        "<div style='text-align:center; "
+        "font-size:0.78rem; font-weight:700; "
+        "letter-spacing:0.08em; color:#475569;'>"
+        "✦ AI DOCUMENT INTELLIGENCE"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
-st.markdown(
-    "<div style='text-align:center; "
-    "font-size:2.4rem; font-weight:800; "
-    "color:#172554; margin-top:0.05rem;'>"
-    "Credential Intelligence"
-    "</div>",
-    unsafe_allow_html=True,
-)
+    st.markdown(
+        "<div style='text-align:center; "
+        "font-size:2.4rem; font-weight:800; "
+        "color:#172554; margin-top:0.05rem;'>"
+        "Credential Intelligence"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
-st.markdown(
-    "<div style='text-align:center; "
-    "font-size:0.9rem; color:#64748b; "
-    "margin-top:0.15rem;'>"
-    "AI-powered document extraction, human verification, "
-    "and secure credential management."
-    "</div>",
-    unsafe_allow_html=True,
-)
+    st.markdown(
+        "<div style='text-align:center; "
+        "font-size:0.9rem; color:#64748b; "
+        "margin-top:0.15rem;'>"
+        "AI-powered document extraction, human verification, "
+        "and secure credential management."
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
-st.markdown(
-    "<hr style='margin:0.8rem 0 1.2rem 0; "
-    "border:none; border-top:1px solid #e2e8f0;'>",
-    unsafe_allow_html=True,
-)
+    st.markdown(
+        "<hr style='margin:0.8rem 0 1.2rem 0; "
+        "border:none; border-top:1px solid #e2e8f0;'>",
+        unsafe_allow_html=True,
+    )
+
     # ========================================================
     # COMPACT STYLING
     # ========================================================
@@ -251,9 +252,7 @@ st.markdown(
             unsafe_allow_html=True,
         )
 
-        workspaces = load_workspaces(
-            supabase
-        )
+        workspaces = load_workspaces(supabase)
 
         if not workspaces:
 
@@ -302,9 +301,7 @@ st.markdown(
                     workspace_id,
                 )
 
-                st.caption(
-                    "Registers"
-                )
+                st.caption("Registers")
 
                 if not registers:
 
@@ -337,9 +334,7 @@ st.markdown(
         # ACTION BOXES
         # ====================================================
 
-        action_col1, action_col2 = st.columns(
-            2
-        )
+        action_col1, action_col2 = st.columns(2)
 
         # ----------------------------------------------------
         # ADD WORKSPACE
@@ -347,13 +342,9 @@ st.markdown(
 
         with action_col1:
 
-            with st.container(
-                border=True
-            ):
+            with st.container(border=True):
 
-                st.markdown(
-                    "**＋ Add Workspace**"
-                )
+                st.markdown("**＋ Add Workspace**")
 
                 with st.form(
                     "dashboard_add_workspace_form"
@@ -392,9 +383,7 @@ st.markdown(
 
                         except Exception as exc:
 
-                            st.error(
-                                str(exc)
-                            )
+                            st.error(str(exc))
 
         # ----------------------------------------------------
         # ADD REGISTER
@@ -402,13 +391,9 @@ st.markdown(
 
         with action_col2:
 
-            with st.container(
-                border=True
-            ):
+            with st.container(border=True):
 
-                st.markdown(
-                    "**＋ Add Register**"
-                )
+                st.markdown("**＋ Add Register**")
 
                 if not workspaces:
 
@@ -482,6 +467,4 @@ st.markdown(
 
                             except Exception as exc:
 
-                                st.error(
-                                    str(exc)
-                                )
+                                st.error(str(exc))
