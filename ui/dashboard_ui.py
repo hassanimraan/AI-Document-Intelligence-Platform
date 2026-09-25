@@ -269,7 +269,7 @@ def render_dashboard(supabase):
             workspace_id = workspace["id"]
             workspace_name = workspace["name"]
 
-            # Workspace button
+            # Workspace
             if st.button(
                 f"Workspace — {workspace_name}",
                 key=f"workspace_{workspace_id}",
@@ -286,7 +286,7 @@ def render_dashboard(supabase):
 
                 st.rerun()
 
-            # Show registers directly under the workspace
+            # Registers belonging to this workspace
             if (
                 st.session_state.get(
                     "active_workspace_id"
@@ -313,7 +313,7 @@ def render_dashboard(supabase):
                         register_name = register["name"]
 
                         if st.button(
-                            f"　└─ Register — {register_name}",
+                            f"└─ Register — {register_name}",
                             key=f"register_{register_id}",
                             use_container_width=True,
                         ):
@@ -336,7 +336,6 @@ def render_dashboard(supabase):
                     "<div style='height:0.45rem;'></div>",
                     unsafe_allow_html=True,
                 )
-
         # ====================================================
         # ACTION BOXES
         # ====================================================
