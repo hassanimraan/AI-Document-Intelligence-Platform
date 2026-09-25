@@ -1,3 +1,4 @@
+```python
 import json
 
 import streamlit as st
@@ -76,10 +77,6 @@ def render_upload_ui():
         key="credential_pdf_uploader",
     )
 
-    # ========================================================
-    # NO FILES SELECTED
-    # ========================================================
-
     if not uploaded_files:
         stale_keys = [
             "selected_file_names",
@@ -96,10 +93,6 @@ def render_upload_ui():
 
         return
 
-    # ========================================================
-    # UPLOAD QUEUE STATE
-    # ========================================================
-
     st.session_state.uploaded_file_count = len(uploaded_files)
 
     current_file_signature = _get_uploaded_file_signature(
@@ -109,10 +102,6 @@ def render_upload_ui():
     previous_file_signature = st.session_state.get(
         "uploaded_file_signature"
     )
-
-    # --------------------------------------------------------
-    # Detect a changed upload queue.
-    # --------------------------------------------------------
 
     if previous_file_signature != current_file_signature:
         st.session_state.uploaded_file_signature = (
@@ -139,10 +128,6 @@ def render_upload_ui():
 
         reset_current_document_workflow()
 
-    # ========================================================
-    # PROTECT STORED INDEX
-    # ========================================================
-
     stored_index = st.session_state.get(
         "selected_pdf_index",
         0,
@@ -160,10 +145,6 @@ def render_upload_ui():
     )
 
     st.session_state.selected_pdf_index = stored_index
-
-    # ========================================================
-    # DOCUMENT SELECTOR
-    # ========================================================
 
     file_options = [
         file.name for file in uploaded_files
@@ -185,10 +166,6 @@ def render_upload_ui():
 
     current_file = uploaded_files[selected_index]
 
-    # --------------------------------------------------------
-    # Identity of the currently selected file.
-    # --------------------------------------------------------
-
     current_file_signature = (
         current_file.name,
         getattr(current_file, "size", None),
@@ -197,10 +174,6 @@ def render_upload_ui():
     st.session_state.current_file_signature = (
         current_file_signature
     )
-
-    # ========================================================
-    # PROGRESS INFORMATION
-    # ========================================================
 
     total_files = len(uploaded_files)
     display_number = selected_index + 1
@@ -217,10 +190,6 @@ def render_upload_ui():
             f"Processing queue: {display_number} / "
             f"{total_files} documents"
         )
-
-    # ========================================================
-    # ADVANCE TO NEXT PDF
-    # ========================================================
 
     if st.session_state.get(
         "advance_to_next_pdf",
@@ -248,36 +217,14 @@ def render_upload_ui():
                 None,
             )
 
-    # ========================================================
-    # ALL DOCUMENTS COMPLETED
-    # ========================================================
-
     if st.session_state.get(
         "processing_complete",
         False,
     ):
-    
-    st.success(
-        "PDF processed successfully: "
-        f"{current_file.name}"
-    )
-
-    st.rerun()
-
-    except ValueError as exc:
-        st.error(
-            f"PDF processing failed: {exc}"
+        st.success(
+            f"All {total_files} selected PDF documents "
+            "have been processed and reviewed."
         )
-
-        except Exception as exc:
-            st.error(
-                "PDF processing could not be completed."
-            )
-            st.exception(exc)
-
-    # ========================================================
-    # PROCESS CURRENT PDF
-    # ========================================================
 
     if st.button(
         "🔍 Process Current PDF",
@@ -285,15 +232,7 @@ def render_upload_ui():
         key="process_current_pdf_button",
     ):
         try:
-            # ------------------------------------------------
-            # Validate before PDF processing/Gemini.
-            # ------------------------------------------------
-
             validate_pdf(current_file)
-
-            # ------------------------------------------------
-            # Clear downstream workflow state.
-            # ------------------------------------------------
 
             reset_after_new_extraction()
 
@@ -320,10 +259,6 @@ def render_upload_ui():
             extracted_data = _parse_extracted_data(
                 extracted_data
             )
-
-            # ------------------------------------------------
-            # Store temporary workflow state.
-            # ------------------------------------------------
 
             st.session_state.processed_pdf_name = (
                 current_file.name
@@ -355,15 +290,11 @@ def render_upload_ui():
                 f"PDF processing failed: {exc}"
             )
 
-                except Exception as exc:
+        except Exception as exc:
             st.error(
                 "PDF processing could not be completed."
             )
             st.exception(exc)
-
-    # ========================================================
-    # EXTRACTED TEXT
-    # ========================================================
 
     extracted_text = st.session_state.get(
         "extracted_text"
@@ -372,11 +303,6 @@ def render_upload_ui():
     processed_file_signature = st.session_state.get(
         "processed_file_signature"
     )
-
-    # --------------------------------------------------------
-    # Display extracted text only when it belongs to the
-    # currently selected file.
-    # --------------------------------------------------------
 
     if (
         extracted_text
@@ -389,3 +315,4 @@ def render_upload_ui():
             expanded=False,
         ):
             st.text(extracted_text)
+```
