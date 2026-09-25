@@ -256,10 +256,24 @@ def render_upload_ui():
         "processing_complete",
         False,
     ):
-        st.success(
-            f"All {total_files} selected PDF documents "
-            "have been processed and reviewed."
+    
+    st.success(
+        "PDF processed successfully: "
+        f"{current_file.name}"
+    )
+
+    st.rerun()
+
+    except ValueError as exc:
+        st.error(
+            f"PDF processing failed: {exc}"
         )
+
+        except Exception as exc:
+            st.error(
+                "PDF processing could not be completed."
+            )
+            st.exception(exc)
 
     # ========================================================
     # PROCESS CURRENT PDF
