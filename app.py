@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 
 from ui.theme import apply_app_theme
@@ -119,4 +118,3 @@ st.caption(
     "AI Document Intelligence • "
     "Supabase PostgreSQL • Google Gemini"
 )
-```
